@@ -263,6 +263,17 @@ abstract class StyleController {
   /// https://maplibre.org/maplibre-style-spec/projection/
   void setProjection(Expression<MapProjection> projection);
 
+  /// Sets the 3D [terrain] of the style, or removes it when [terrain] is
+  /// null.
+  Future<void> setTerrain(Terrain? terrain);
+
+  /// The 3D terrain of the style, or null if it has none.
+  Terrain? get terrain;
+
+  /// Sets the global state property [key] of the style to [value], which
+  /// `global-state` expressions of the style read.
+  Future<void> setGlobalState(String key, Object? value);
+
   /// Clean up resources.
   void dispose();
 }

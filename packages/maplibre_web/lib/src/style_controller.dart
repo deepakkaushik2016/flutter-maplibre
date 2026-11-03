@@ -370,6 +370,17 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
       _map.setProjection(
         interop.ProjectionSpecification(type: projection.toJson().jsify()!),
       );
+
+  @override
+  Future<void> setTerrain(Terrain? terrain) =>
+      throw UnimplementedError('setTerrain: implemented in a later task');
+
+  @override
+  Terrain? get terrain => null;
+
+  @override
+  Future<void> setGlobalState(String key, Object? value) =>
+      throw UnimplementedError('setGlobalState: implemented in a later task');
 }
 
 /// A transparent PNG of one pixel, the image of an image source until its

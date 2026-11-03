@@ -381,6 +381,17 @@ class StyleControllerNative extends StyleController implements StyleBackend {
   static var _warnedProjection = false;
 
   @override
+  Future<void> setTerrain(Terrain? terrain) =>
+      throw UnimplementedError('setTerrain: implemented in a later task');
+
+  @override
+  Terrain? get terrain => null;
+
+  @override
+  Future<void> setGlobalState(String key, Object? value) =>
+      throw UnimplementedError('setGlobalState: implemented in a later task');
+
+  @override
   void dispose() {
     _disposed = true;
     layers.dispose();

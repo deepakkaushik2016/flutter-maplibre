@@ -808,6 +808,18 @@ class MapLibreMapStateNative extends MapLibreMapState {
   }
 
   @override
+  Future<void> setTerrainLoadMode(TerrainLoadMode mode) =>
+      throw UnimplementedError(
+        'setTerrainLoadMode: implemented in a later task',
+      );
+
+  @override
+  Future<double?> queryTerrainElevation(Geographic point) =>
+      throw UnimplementedError(
+        'queryTerrainElevation: implemented in a later task',
+      );
+
+  @override
   Future<List<RenderedFeature>> queryRenderedFeatures(
     QueryGeometry geometry, {
     List<String>? layerIds,

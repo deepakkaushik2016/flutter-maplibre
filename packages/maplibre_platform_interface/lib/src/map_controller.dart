@@ -158,4 +158,11 @@ abstract interface class MapController {
     int limit = 10,
     int offset = 0,
   });
+
+  /// Sets how the map trades the detail of the terrain for loading speed.
+  Future<void> setTerrainLoadMode(TerrainLoadMode mode);
+
+  /// Returns the elevation of the terrain at [point] in meters, or null if
+  /// the style has no terrain or its tiles at [point] have not loaded.
+  Future<double?> queryTerrainElevation(Geographic point);
 }
