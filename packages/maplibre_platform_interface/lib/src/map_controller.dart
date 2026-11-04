@@ -166,7 +166,27 @@ abstract interface class MapController {
   /// so on web this does nothing.
   Future<void> setTerrainLoadMode(TerrainLoadMode mode);
 
-  /// Returns the elevation of the terrain at [point] in meters, or null if
-  /// the style has no terrain or its tiles at [point] have not loaded.
+  /// Returns the height of the terrain at [point] as the map draws it, in
+  /// meters above sea level.
+  ///
+  /// The drawn height includes the terrain's [Terrain.exaggeration] on every
+  /// platform, as maplibre-gl-js reports it: under an exaggeration of 1.5, a
+  /// 1000 m peak reads 1500 m. The true height of the ground is the drawn
+  /// height divided by the exaggeration. At an exaggeration of 0 the terrain
+  /// is drawn flat, so the drawn height is 0 and there is no ground height to
+  /// derive.
+  ///
+  /// Returns null if the style has no terrain, or if no DEM tile that the map
+  /// has loaded covers [point]: before its tile arrives, beyond the tiles of
+  /// the terrain's source, and before the map has drawn its first frame. A
+  /// point off screen reads its height while its DEM tile stays loaded.
+  ///
+  /// maplibre-gl-js draws each DEM pixel at its centre and MapLibre Native at
+  /// its corner, so on steep ground the platforms can differ by the slope
+  /// across half a DEM pixel. Before maplibre-gl-js 6.15.0, ground at exactly
+  /// 0 m reads null on web.
+  ///
+  /// Each call is one query of the map's latest frame on native, or one call
+  /// into maplibre-gl-js on web.
   Future<double?> queryTerrainElevation(Geographic point);
 }

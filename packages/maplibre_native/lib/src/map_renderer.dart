@@ -116,6 +116,13 @@ final class MapRenderer implements FrameTargetHost {
   /// GeoJSON source.
   RenderSessionHandle get session => _session;
 
+  /// Reads the height of the terrain at [point] as the session's latest frame
+  /// draws it, with the terrain's exaggeration. The C API answers
+  /// asynchronously, with no value when the style has no terrain or no DEM
+  /// tile that the session loaded covers [point].
+  Future<TerrainElevation?> queryTerrainElevation(LatLng point) =>
+      _session.queryTerrainElevation(point);
+
   @override
   bool get disposed => _disposed;
 

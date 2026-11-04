@@ -598,6 +598,18 @@ Each entry: the decision, then why.
   next camera or terrain change on, while native applies a change at once.
   The web state doesn't nudge the camera to match, as a jump would also
   stop a running animation.
+- **`queryTerrainElevation` reports the drawn height, with the
+  exaggeration, on every platform**, as gl-js's `Map.queryTerrainElevation`
+  and `mln_render_session_query_terrain_elevation` both do; the app divides
+  by a nonzero exaggeration for the ground. One call per query: native
+  passes the C API's answer through, and its no value and `invalidState`
+  (a session without a frame yet) both become null. gl-js gives
+  0 both for 0 m and where no DEM tile has loaded, so on web only a 0 asks
+  `map.terrain.getElevationAndDEMStateForLngLat` (gl-js 6.15.0 and later)
+  whether the tile has loaded; earlier versions read 0 as null. Both
+  platforms answer for a point off screen while its DEM tile stays loaded,
+  and null beyond the source's tiles. No batch call: the app's elevation
+  profiles come from its server.
 - **On web, Flutter is the only hit-tester.** The gl-js map is created with
   `interactive: false` and its container has `pointer-events: none`, so the
   browser hands every pointer to Flutter, and widgets over the map no longer
@@ -782,6 +794,14 @@ Each entry: the decision, then why.
 - On web, a style error event that `setStyle` didn't cause, such as one
   from a call on the old style during a load, also fails a terrain that
   waits for that load.
+- MapLibre Native draws a DEM pixel at its corner, i/256 of the tile, and
+  gl-js at its centre, (i + 0.5)/256, so the same tiles draw the ground half
+  a DEM pixel apart, and `queryTerrainElevation` reads what each draws: on
+  the synthetic ridge's 37 % slope, 18 m apart (1550 m native, 1532 m web).
+  On Mapterhorn's zoom-12 tiles at 47° N half a pixel is about 6.5 m.
+- The C API's `invalidState` before a session's first frame is mapped to
+  null but no test reaches it: a query from `onMapCreated` runs after the
+  frame the renderer has already demanded.
 - Native `toScreenLocation`/`toLngLat` project at sea level, also over a
   terrain: `MapProjectionHandle` has no heights, and the C API has no
   projection onto the terrain (the render session casts onto it only for

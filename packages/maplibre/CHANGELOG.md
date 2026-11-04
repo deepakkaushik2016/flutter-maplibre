@@ -13,6 +13,9 @@
   the fingers instead of a plane at sea level.
 - 3D terrain: `MapController.setTerrainLoadMode` trades the detail of the
   terrain for loading speed on native. It does nothing on web.
+- 3D terrain: `MapController.queryTerrainElevation` reads the height of the
+  terrain at a point as the map draws it, with the exaggeration, on web and
+  native, or null where no terrain or DEM tile is loaded.
 
 ## 0.4.0-pre.2
 

@@ -869,10 +869,19 @@ class MapLibreMapStateNative extends MapLibreMapState {
   }
 
   @override
-  Future<double?> queryTerrainElevation(Geographic point) =>
-      throw UnimplementedError(
-        'queryTerrainElevation: implemented in a later task',
-      );
+  Future<double?> queryTerrainElevation(Geographic point) async {
+    final renderer = _renderer;
+    if (renderer == null || _disposed) return null;
+    try {
+      final elevation = await renderer.queryTerrainElevation(_latLng(point));
+      return elevation?.meters;
+    } on mln.MaplibreException catch (error) {
+      // The session has no frame to read yet: before its first frame, or
+      // after its scale factor changed. No terrain is drawn then.
+      if (error.status == mln.Status.invalidState) return null;
+      rethrow;
+    }
+  }
 
   @override
   Future<List<RenderedFeature>> queryRenderedFeatures(
