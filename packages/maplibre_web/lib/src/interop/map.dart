@@ -114,6 +114,11 @@ extension type JsMap._(Camera _) implements Camera {
   /// Update the maximum bounding box of the map camera.
   external void setMaxBounds(LngLatBounds? maxBounds);
 
+  /// Sets whether the camera's center follows the ground of the terrain.
+  // The JavaScript method takes the flag as its only argument.
+  // ignore: avoid_positional_boolean_parameters
+  external void setCenterClampedToGround(bool centerClampedToGround);
+
   /// Update the used projection.
   ///
   /// https://maplibre.org/maplibre-style-spec/projection/
@@ -212,6 +217,7 @@ extension type MapOptions._(JSObject _) implements JSObject {
     required bool attributionControl,
     bool? interactive,
     JSFunction? transformRequest,
+    bool? centerClampedToGround,
   });
 }
 

@@ -6,6 +6,9 @@
   map by a raster DEM source, `StyleController.terrain` reads it back, and
   `StyleController.setGlobalState` sets what `global-state` expressions read,
   on web and native.
+- 3D terrain: the camera's center follows the ground by default, so a pitched
+  camera stays above it; `MapOptions.centerClampedToGround: false` turns that
+  off.
 
 ## 0.4.0-pre.2
 

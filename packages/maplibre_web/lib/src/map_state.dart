@@ -112,6 +112,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
           // MapGestureDetector handles the input.
           interactive: false,
           transformRequest: _transformRequest.toJS,
+          centerClampedToGround: options.centerClampedToGround,
         ),
       );
       _mapCreated = true;
@@ -440,6 +441,10 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     }
     if (options.maxBounds != oldWidget.options.maxBounds) {
       _map.setMaxBounds(options.maxBounds?.toJs());
+    }
+    if (options.centerClampedToGround !=
+        oldWidget.options.centerClampedToGround) {
+      _map.setCenterClampedToGround(options.centerClampedToGround);
     }
     if (options.style != oldWidget.options.style) _setStyle(options.style);
     layerManager?.updateLayers(widget.layers);

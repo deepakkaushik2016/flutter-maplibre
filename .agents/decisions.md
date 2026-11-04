@@ -558,12 +558,16 @@ Each entry: the decision, then why.
   platform. Discrete zooms (wheel, double tap) use `zoomBy`.
 - **Native applies steps with `mln_map_apply_camera_delta`**, the C API's
   equivalent of mbgl's moveBy/scaleBy/rotateBy/pitchBy, one atomic delta per
-  step with the gesture phase. A released gesture flings as the map's
-  gesture momentum (`mln_gesture_momentum` on the end delta, with the core's
-  default friction decay for pan, zoom and bearing), which the next
-  gesture's begin stops. Native and web feel different on purpose: native
-  uses the core's fling. The move ends from the end delta's transition end
-  handler, which also runs at once for a release too slow to fling.
+  step with the gesture phase. Native maps don't fling yet.
+- **The camera's center follows the ground of a terrain by default.**
+  `MapOptions.centerClampedToGround` (default true, as in gl-js) goes to
+  `mln_map_set_terrain_options` when a native map is created; the map keeps
+  it for every style, and it applies only while the style has a terrain.
+  Without it, a pitched camera over high ground can sit under the ground and
+  show nothing.
+- **Web leaves the terrain camera to gl-js.** gl-js clamps the center by
+  default (`centerClampedToGround` is passed to the `Map`), and its
+  projection follows the terrain, so the web sink is unchanged.
 - **On web, Flutter is the only hit-tester.** The gl-js map is created with
   `interactive: false` and its container has `pointer-events: none`, so the
   browser hands every pointer to Flutter, and widgets over the map no longer

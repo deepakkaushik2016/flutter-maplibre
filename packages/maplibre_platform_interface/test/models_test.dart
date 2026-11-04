@@ -188,10 +188,18 @@ void main() {
         const MapOptions(),
         isNot(const MapOptions(fastPforEnabled: true)),
       );
+      expect(
+        const MapOptions(),
+        isNot(const MapOptions(centerClampedToGround: false)),
+      );
     });
 
     test('leaves FastPFOR decoding off by default, as MapLibre Native', () {
       expect(const MapOptions().fastPforEnabled, isFalse);
+    });
+
+    test('clamps the camera center to the ground by default', () {
+      expect(const MapOptions().centerClampedToGround, isTrue);
     });
   });
 

@@ -23,6 +23,7 @@ class MapOptions {
     this.movements = const MapMovements(),
     this.gestures = const MapGestures(),
     this.fastPforEnabled = false,
+    this.centerClampedToGround = true,
   });
 
   /// Find the [MapOptions] of the closest [MapLibreMap] in the widget tree.
@@ -91,6 +92,14 @@ class MapOptions {
   /// Not needed on web, where FastPFOR decoding is always enabled.
   final bool fastPforEnabled;
 
+  /// Whether the camera's center follows the ground of the style's
+  /// [Terrain], as in maplibre-gl-js. Defaults to true.
+  ///
+  /// The camera then looks at the ground under its center and stays above
+  /// the ground. If false, the center stays at sea level, and a pitched
+  /// camera over high ground can end up under the ground and show nothing.
+  final bool centerClampedToGround;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -104,7 +113,8 @@ class MapOptions {
           maxBounds == other.maxBounds &&
           movements == other.movements &&
           gestures == other.gestures &&
-          fastPforEnabled == other.fastPforEnabled;
+          fastPforEnabled == other.fastPforEnabled &&
+          centerClampedToGround == other.centerClampedToGround;
 
   @override
   int get hashCode => Object.hash(
@@ -118,5 +128,6 @@ class MapOptions {
     movements,
     gestures,
     fastPforEnabled,
+    centerClampedToGround,
   );
 }

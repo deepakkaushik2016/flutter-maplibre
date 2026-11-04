@@ -150,6 +150,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
     // camera constraints is one, so they follow the first style.
     _constraintsAfterStyle = initCamera == null;
     await Future.wait([
+      _applyCenterClamp(map),
       if (initCamera != null) ...[
         _applyOptions(),
         _applyInitialCamera(map, initCamera),
@@ -165,6 +166,12 @@ class MapLibreMapStateNative extends MapLibreMapState {
     final camera = await _cameraOptions(map, initCamera);
     await map.updateCamera(mln.CameraUpdate(camera: camera));
   }
+
+  /// Applies [MapOptions.centerClampedToGround]. The map keeps it for every
+  /// style, and it applies only while the style has a terrain.
+  Future<void> _applyCenterClamp(mln.MapHandle map) => map.setTerrainOptions(
+    mln.MapTerrainOptions(centerClampedToGround: options.centerClampedToGround),
+  );
 
   /// Applies the camera constraints of [MapOptions].
   Future<void> _applyOptions() async {
@@ -202,6 +209,10 @@ class MapLibreMapStateNative extends MapLibreMapState {
   void didUpdateWidget(covariant MapLibreMap oldWidget) {
     final options = widget.options;
     if (oldWidget.options != options) unawaited(_applyOptions());
+    if (oldWidget.options.centerClampedToGround !=
+        options.centerClampedToGround) {
+      if (_map case final map?) unawaited(_applyCenterClamp(map));
+    }
     if (oldWidget.options.style != options.style) {
       unawaited(_setStyle(options.style));
     }
