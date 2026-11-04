@@ -36,3 +36,14 @@ dev_dependencies:
 #       backend:
 #         android: vulkan
 #       local_build: ../maplibre-native-ffi/build
+
+# Local development against the terrain build of maplibre-native-ffi (a
+# sibling clone). Drop this block once a release of the binding carries the
+# terrain API.
+dependency_overrides:
+  maplibre_native_ffi: {path: ../maplibre-native-ffi/bindings/dart}
+
+hooks:
+  user_defines:
+    maplibre_native_ffi:
+      local_build: ../maplibre-native-ffi/build
