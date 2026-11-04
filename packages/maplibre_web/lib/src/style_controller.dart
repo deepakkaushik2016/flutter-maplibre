@@ -3,9 +3,12 @@ part of 'map_state.dart';
 /// Web specific implementation of the [StyleController].
 class StyleControllerWeb extends StyleController implements StyleBackend {
   /// Create a new [StyleControllerWeb] instance.
-  StyleControllerWeb(this._map);
+  StyleControllerWeb(this._map, this._deferredTerrain);
 
   final interop.JsMap _map;
+
+  /// Holds a terrain set while the map loads a new style.
+  final DeferredTerrain _deferredTerrain;
 
   @override
   late final StyleSources sources = StyleSources(this, layers: () => layers);
@@ -372,15 +375,39 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
       );
 
   @override
-  Future<void> setTerrain(Terrain? terrain) =>
-      throw UnimplementedError('setTerrain: implemented in a later task');
+  Future<void> setTerrain(Terrain? terrain) async {
+    if (_deferredTerrain.defer(terrain) case final applied?) return applied;
+    applyTerrain(terrain);
+  }
+
+  /// Sets [terrain] on the map now, which must have loaded its style.
+  void applyTerrain(Terrain? terrain) {
+    // MapLibre GL JS throws an error that doesn't say which source is
+    // missing in its message, so it is checked first.
+    if (terrain != null && _map.getSource(terrain.sourceId) == null) {
+      throw StateError(
+        'The style is missing the source "${terrain.sourceId}" of the '
+        'terrain.',
+      );
+    }
+    _throwErrorEvents(() => _map.setTerrain(terrain?.toJson().jsify()));
+  }
 
   @override
-  Terrain? get terrain => null;
+  Terrain? get terrain {
+    final terrain = _map.getTerrain();
+    if (terrain == null) return null;
+    return Terrain(
+      sourceId: terrain.getProperty<JSString>('source'.toJS).toDart,
+      exaggeration:
+          terrain.getProperty<JSNumber?>('exaggeration'.toJS)?.toDartDouble ??
+          1,
+    );
+  }
 
   @override
-  Future<void> setGlobalState(String key, Object? value) =>
-      throw UnimplementedError('setGlobalState: implemented in a later task');
+  Future<void> setGlobalState(String key, Object? value) async =>
+      _map.setGlobalStateProperty(key, value.jsify());
 }
 
 /// A transparent PNG of one pixel, the image of an image source until its

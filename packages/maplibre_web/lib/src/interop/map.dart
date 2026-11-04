@@ -119,6 +119,23 @@ extension type JsMap._(Camera _) implements Camera {
   /// https://maplibre.org/maplibre-style-spec/projection/
   external void setProjection(ProjectionSpecification projection);
 
+  /// Sets the 3D terrain, a terrain specification, or removes it if
+  /// [terrain] is null.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#setterrain
+  external void setTerrain(JSAny? terrain);
+
+  /// The terrain specification of the 3D terrain, or null.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#getterrain
+  external JSObject? getTerrain();
+
+  /// Sets the global state property [name] that `global-state` expressions
+  /// read.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#setglobalstateproperty
+  external void setGlobalStateProperty(String name, JSAny? value);
+
   /// Get a Source by its id.
   external SourceSpecification? getSource(String id);
 

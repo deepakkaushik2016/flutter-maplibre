@@ -40,6 +40,9 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   final _cameraPaddingReset = CameraPaddingReset();
   bool _nextGestureCausedByController = false;
 
+  /// Holds a terrain set while [_setStyle] loads a style.
+  final _deferredTerrain = DeferredTerrain();
+
   /// The attributions that the widgets in [MapLibreMap.children] last saw.
   List<String> _attributions = const [];
 
@@ -751,6 +754,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     // Only the next LayerManager sees MapLibreMap.layers: the layers of the
     // old one go with the old style.
     layerManager = null;
+    _deferredTerrain.styleLoading();
     _map.once(
       interop.MapEventType.styleLoad,
       (JSAny _) {
@@ -801,8 +805,11 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   void _onStyleLoaded() {
     layerManager = null;
     style?.dispose();
-    final styleCtrl = StyleControllerWeb(_map)..load();
+    final styleCtrl = StyleControllerWeb(_map, _deferredTerrain)..load();
     style = styleCtrl;
+    // Applied at once: the style has loaded, and a failure goes to the
+    // future of setTerrain.
+    unawaited(_deferredTerrain.styleLoaded(styleCtrl.applyTerrain));
     widget.onStyleLoaded?.call(styleCtrl);
     layerManager = LayerManager(styleCtrl, widget.layers);
     _attributions = styleCtrl.attributions;
