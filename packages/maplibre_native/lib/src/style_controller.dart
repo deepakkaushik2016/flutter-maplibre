@@ -409,13 +409,27 @@ class StyleControllerNative extends StyleController implements StyleBackend {
 
   /// Sets [terrain] on the map now. JSON null removes the terrain.
   Future<void> applyTerrain(Terrain? terrain) async {
-    // The C API takes a terrain on a source the style lacks, which web
-    // rejects. The source cache answers without a call to the map.
-    if (terrain != null && sources[terrain.sourceId] == null) {
-      throw StateError(
-        'The style is missing the source "${terrain.sourceId}" of the '
-        'terrain.',
-      );
+    if (_disposed) {
+      throw StateError('The style was replaced; use the current style.');
+    }
+    // The C API takes a terrain on a source the style lacks or on one that
+    // has no heights, both of which web rejects. The source cache answers
+    // without a call to the map.
+    if (terrain != null) {
+      switch (sources[terrain.sourceId]) {
+        case null:
+          throw StateError(
+            'The style is missing the source "${terrain.sourceId}" of the '
+            'terrain.',
+          );
+        case RasterDemSource():
+          break;
+        case final source:
+          throw StateError(
+            'The source "${terrain.sourceId}" of the terrain is a '
+            '"${source.toJson()?['type']}" source, not "raster-dem".',
+          );
+      }
     }
     await _map.setStyleTerrainJson(terrain?.toJson());
     _terrain = terrain;

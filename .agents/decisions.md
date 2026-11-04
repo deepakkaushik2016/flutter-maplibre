@@ -722,7 +722,15 @@ Each entry: the decision, then why.
   `StyleControllerNative.setTerrain` checks the source in its `StyleSources`
   cache first (one map lookup, no call to the map) and throws the same
   `StateError` as web, so a terrain on a missing source fails on every
-  platform. Removing the terrain checks nothing.
+  platform. A source that is not `raster-dem` fails the same way on both,
+  with its type in the message, as native would show no heights. Removing the
+  terrain checks nothing.
+- A URL style whose document gl-js diffs without changes fires no
+  `style.load` and no error, so a terrain set while it loaded waits until
+  the next style loads or the map is disposed. A JSON style is detected.
+- On web, a style error event that `setStyle` didn't cause, such as one
+  from a call on the old style during a load, also fails a terrain that
+  waits for that load.
 - The C API has no setter for the offline tile count limit and no automatic
   database packing, so `setOfflineTileCountLimit` and
   `runPackDatabaseAutomatically` were removed from the `OfflineManager`.

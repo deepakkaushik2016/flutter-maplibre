@@ -329,8 +329,11 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
     if (error case final error?) throw StateError(error);
   }
 
+  var _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     layers.dispose();
     sources.dispose();
     // Interop members can't be torn off for forEach.
@@ -382,13 +385,27 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
 
   /// Sets [terrain] on the map now, which must have loaded its style.
   void applyTerrain(Terrain? terrain) {
+    if (_disposed) {
+      throw StateError('The style was replaced; use the current style.');
+    }
     // MapLibre GL JS throws an error that doesn't say which source is
-    // missing in its message, so it is checked first.
-    if (terrain != null && _map.getSource(terrain.sourceId) == null) {
-      throw StateError(
-        'The style is missing the source "${terrain.sourceId}" of the '
-        'terrain.',
-      );
+    // missing in its message, and takes a source without heights, so both
+    // are checked first, with the same errors as on native.
+    if (terrain != null) {
+      final source = _map.getSource(terrain.sourceId);
+      if (source == null) {
+        throw StateError(
+          'The style is missing the source "${terrain.sourceId}" of the '
+          'terrain.',
+        );
+      }
+      final type = source.getProperty<JSString?>('type'.toJS)?.toDart;
+      if (type != 'raster-dem') {
+        throw StateError(
+          'The source "${terrain.sourceId}" of the terrain is a "$type" '
+          'source, not "raster-dem".',
+        );
+      }
     }
     _throwErrorEvents(() => _map.setTerrain(terrain?.toJson().jsify()));
   }
