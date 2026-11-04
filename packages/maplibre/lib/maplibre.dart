@@ -190,6 +190,8 @@ export 'package:maplibre_platform_interface/maplibre_platform_interface.dart'
         SymbolPlacement,
         SymbolStyleLayer,
         SymbolZOrder,
+        Terrain,
+        TerrainLoadMode,
         TextAnchor,
         TextJustify,
         TextOverlap,
