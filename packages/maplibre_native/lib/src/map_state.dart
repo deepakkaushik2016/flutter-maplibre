@@ -847,10 +847,17 @@ class MapLibreMapStateNative extends MapLibreMapState {
   }
 
   @override
-  Future<void> setTerrainLoadMode(TerrainLoadMode mode) =>
-      throw UnimplementedError(
-        'setTerrainLoadMode: implemented in a later task',
-      );
+  Future<void> setTerrainLoadMode(TerrainLoadMode mode) async {
+    await _map?.setTerrainOptions(
+      mln.MapTerrainOptions(
+        loadMode: switch (mode) {
+          TerrainLoadMode.quality => mln.TerrainLoadMode.quality,
+          TerrainLoadMode.balanced => mln.TerrainLoadMode.balanced,
+          TerrainLoadMode.performance => mln.TerrainLoadMode.performance,
+        },
+      ),
+    );
+  }
 
   @override
   Future<double?> queryTerrainElevation(Geographic point) =>

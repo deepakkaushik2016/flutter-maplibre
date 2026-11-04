@@ -9,6 +9,8 @@
 - 3D terrain: the camera's center follows the ground by default, so a pitched
   camera stays above it; `MapOptions.centerClampedToGround: false` turns that
   off.
+- 3D terrain: `MapController.setTerrainLoadMode` trades the detail of the
+  terrain for loading speed on native. It does nothing on web.
 
 ## 0.4.0-pre.2
 

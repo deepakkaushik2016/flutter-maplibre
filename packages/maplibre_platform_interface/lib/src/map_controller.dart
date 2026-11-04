@@ -160,6 +160,10 @@ abstract interface class MapController {
   });
 
   /// Sets how the map trades the detail of the terrain for loading speed.
+  /// The default is [TerrainLoadMode.quality].
+  ///
+  /// It applies to every style of the map. maplibre-gl-js has no load modes,
+  /// so on web this does nothing.
   Future<void> setTerrainLoadMode(TerrainLoadMode mode);
 
   /// Returns the elevation of the terrain at [point] in meters, or null if

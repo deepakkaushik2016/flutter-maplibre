@@ -716,11 +716,10 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
         .toDartDouble;
   }
 
+  /// maplibre-gl-js has no load modes: it loads the terrain the same way in
+  /// each, so this does nothing.
   @override
-  Future<void> setTerrainLoadMode(TerrainLoadMode mode) =>
-      throw UnimplementedError(
-        'setTerrainLoadMode: implemented in a later task',
-      );
+  Future<void> setTerrainLoadMode(TerrainLoadMode mode) async {}
 
   @override
   Future<double?> queryTerrainElevation(Geographic point) =>

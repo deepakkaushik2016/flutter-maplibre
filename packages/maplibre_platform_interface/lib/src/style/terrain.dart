@@ -45,12 +45,14 @@ class Terrain {
 ///
 /// Set it with [MapController.setTerrainLoadMode].
 enum TerrainLoadMode {
-  /// Loads the most detailed terrain tiles.
+  /// Builds every terrain tile in the frame that reveals it, and keeps up
+  /// to 64 of them. The sharpest, but a frame can stall on a burst of tiles.
   quality,
 
-  /// Balances the detail of the terrain and the loading speed.
+  /// Builds up to 32 new terrain tiles a frame, and keeps up to 48.
   balanced,
 
-  /// Loads fewer, less detailed terrain tiles, for speed.
+  /// Builds up to 8 new terrain tiles a frame, and keeps up to 24: the
+  /// smoothest on a weak GPU, and the shortest view distance.
   performance,
 }
