@@ -12,6 +12,7 @@ import 'offline_test.dart' as offline;
 import 'paused_test.dart' as paused;
 import 'projection_test.dart' as projection;
 import 'style_test.dart' as style;
+import 'terrain_test.dart' as terrain;
 import 'ui_test.dart' as ui;
 import 'unsupported_test.dart' as unsupported;
 
@@ -24,6 +25,7 @@ void main() {
   events.runTests();
   projection.runTests();
   style.runTests();
+  terrain.runTests();
   features.runTests();
   mlt.runTests();
   network.runTests();
