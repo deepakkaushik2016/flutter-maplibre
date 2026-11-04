@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
+import 'shared/browser.dart';
 import 'shared/test_map.dart';
 
 void main() {
@@ -22,8 +25,9 @@ const _terrain = Terrain(sourceId: 'dem', exaggeration: 1.25);
 
 /// Serves the fixture DEM and styles that use it without the network. On
 /// native, a loopback server serves them, which counts the DEM requests. In
-/// the browser, which has no server, the DEM is an asset of the app and a
-/// style is a data URL.
+/// the browser, which has no server, the DEM is an asset of the app, whose
+/// requests the browser's resource timing counts, and a style comes from a
+/// custom maplibre-gl-js protocol.
 class _Fixture {
   _Fixture._(this._server, this._dem) {
     _server?.listen(_serve);
@@ -40,10 +44,24 @@ class _Fixture {
 
   final HttpServer? _server;
   final Uint8List? _dem;
-  final _styles = <String>[];
+  final _styles = <String?>[];
 
-  /// The DEM tiles that the server served; always 0 on web.
-  int demRequests = 0;
+  /// Style responses wait for this until [releaseStyles].
+  Completer<void> _held = Completer<void>()..complete();
+
+  /// Holds the responses of styles until [releaseStyles], so a map loads
+  /// them only then.
+  void holdStyles() => _held = Completer<void>();
+
+  /// Lets held style responses go out.
+  void releaseStyles() {
+    if (!_held.isCompleted) _held.complete();
+  }
+
+  var _demRequests = 0;
+
+  /// The requests for the DEM tile.
+  int get demRequests => kIsWeb ? resourceRequests(demTile) : _demRequests;
 
   String get _origin => 'http://127.0.0.1:${_server!.port}';
 
@@ -77,29 +95,40 @@ class _Fixture {
     ],
   };
 
-  /// A URL of [style], which the map has to load before it can parse it.
-  MapStyle styleUrl(Map<String, Object?> style) {
-    final json = jsonEncode(style);
+  /// A URL of [style], which the map has to load before it can parse it,
+  /// or of no style, which fails to load, if [style] is null.
+  MapStyle styleUrl(Map<String, Object?>? style) {
+    _styles.add(style == null ? null : jsonEncode(style));
+    final path = 'style/${_styles.length - 1}.json';
     if (kIsWeb) {
-      return MapStyle.url(
-        Uri.dataFromString(json, mimeType: 'application/json').toString(),
-      );
+      // maplibre-gl-js has loaded: the map that gets this URL exists.
+      addJsonProtocol('fixture', (url) async {
+        await _held.future;
+        final match = RegExp(r'style/(\d+)\.json$').firstMatch(url)!;
+        return _styles[int.parse(match[1]!)] ??
+            (throw StateError('No style at $url'));
+      });
+      return MapStyle.url('fixture://$path');
     }
-    _styles.add(json);
-    return MapStyle.url('$_origin/style/${_styles.length - 1}.json');
+    return MapStyle.url('$_origin/$path');
   }
 
   Future<void> _serve(HttpRequest request) async {
     final path = request.uri.path;
     final response = request.response;
     if (path == '/dem.png') {
-      demRequests++;
+      _demRequests++;
       response.headers.contentType = ContentType('image', 'png');
       response.add(_dem!);
     } else if (RegExp(r'^/style/(\d+)\.json$').firstMatch(path)
         case final match?) {
-      response.headers.contentType = ContentType.json;
-      response.write(_styles[int.parse(match[1]!)]);
+      await _held.future;
+      if (_styles[int.parse(match[1]!)] case final style?) {
+        response.headers.contentType = ContentType.json;
+        response.write(style);
+      } else {
+        response.statusCode = HttpStatus.notFound;
+      }
     } else {
       response.statusCode = HttpStatus.notFound;
     }
@@ -115,8 +144,14 @@ MapOptions _options(MapStyle style) =>
 void runTests() {
   group('terrain', () {
     late _Fixture fixture;
-    setUp(() async => fixture = await _Fixture.start());
-    tearDown(() async => fixture.close());
+    setUp(() async {
+      clearResourceTimings();
+      fixture = await _Fixture.start();
+    });
+    tearDown(() async {
+      fixture.releaseStyles();
+      await fixture.close();
+    });
 
     Future<TestMap> pumpTerrainMap(WidgetTester tester) => pumpMap(
       tester,
@@ -133,12 +168,10 @@ void runTests() {
       await tester.pump();
       expect(map.style.terrain, _terrain);
       // A raster DEM source loads its tiles only once something uses it.
-      if (!kIsWeb) {
-        await map.pumpUntil(
-          () => fixture.demRequests > 0,
-          reason: () => 'the terrain never loaded the DEM',
-        );
-      }
+      await map.pumpUntil(
+        () => fixture.demRequests > 0,
+        reason: () => 'the terrain never loaded the DEM',
+      );
       await map.waitForLatestFrame();
     });
 
@@ -156,20 +189,87 @@ void runTests() {
       final map = await pumpTerrainMap(tester);
       final oldStyle = map.style;
       final since = map.styleLoads;
+      fixture.holdStyles();
       // Only the new style has the source of the terrain.
       await map.setOptions(
         _options(
           fixture.styleUrl(fixture.style(color: '#bbddff', demId: 'dem-new')),
         ),
       );
-      // The new style is still loading: it comes from a URL.
       const terrain = Terrain(sourceId: 'dem-new', exaggeration: 1.25);
       final applied = oldStyle.setTerrain(terrain);
+      // The new style loads only now.
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(map.styleLoads, since);
+      fixture.releaseStyles();
       await map.waitForStyleLoad(since: since);
       await map.pumpFuture(applied, reason: 'setTerrain never completed');
       await tester.pump();
       expect(map.style, isNot(same(oldStyle)));
       expect(map.style.terrain, terrain);
+    });
+
+    testWidgets('a terrain set during an unchanged style reload applies', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      // The same style in other JSON text: gl-js finds nothing to change and
+      // fires no style.load.
+      await map.setOptions(
+        _options(MapStyle.json('${jsonEncode(fixture.style())}\n')),
+      );
+      await map.pumpFuture(
+        map.style.setTerrain(_terrain),
+        reason: 'setTerrain never completed',
+      );
+      await map.pumpUntil(
+        () => map.style.terrain == _terrain,
+        reason: () => 'the terrain is ${map.style.terrain}',
+      );
+    });
+
+    testWidgets('a style that fails to load does not hold setTerrain', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      final oldStyle = map.style;
+      fixture.holdStyles();
+      await map.setOptions(_options(fixture.styleUrl(null)));
+      final failed = oldStyle.setTerrain(_terrain);
+      fixture.releaseStyles();
+      Object? error;
+      await map.pumpFuture(
+        failed.catchError((Object e) => error = e),
+        reason: 'setTerrain never completed',
+      );
+      expect(error, isA<StateError>());
+      // Later calls are not held. With no style loaded, MapLibre Native
+      // rejects them, as it does every style edit; maplibre-gl-js takes them.
+      await map.pumpFuture(
+        map.style.setTerrain(null).then((_) {}, onError: (Object _) {}),
+        reason: 'a later setTerrain never completed',
+      );
+    });
+
+    testWidgets('reads the terrain of a style document', (tester) async {
+      for (final (json, terrain) in [
+        (
+          {'source': 'dem', 'exaggeration': 1.5},
+          const Terrain(sourceId: 'dem', exaggeration: 1.5),
+        ),
+        ({'source': 'dem'}, const Terrain(sourceId: 'dem')),
+      ]) {
+        final map = await pumpMap(
+          tester,
+          options: _options(
+            MapStyle.json(jsonEncode({...fixture.style(), 'terrain': json})),
+          ),
+        );
+        expect(map.style.terrain, terrain);
+        expect(map.style.terrain!.exaggeration, terrain.exaggeration);
+        // Show the next map in a new widget, as a new map.
+        await tester.pumpWidget(const SizedBox());
+      }
     });
 
     testWidgets('a new style drops the terrain', (tester) async {
@@ -197,6 +297,125 @@ void runTests() {
         ),
       );
       expect(map.style.terrain, isNull);
+    });
+
+    testWidgets('a terrain on a source without heights', (tester) async {
+      final map = await pumpTerrainMap(tester);
+      await map.style.sources.add(
+        GeoJsonSource.data(id: 'points', data: featureCollection(const [])),
+      );
+      await expectLater(
+        map.style.setTerrain(const Terrain(sourceId: 'points')),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('"geojson"'), contains('raster-dem')),
+          ),
+        ),
+      );
+      expect(map.style.terrain, isNull);
+    });
+
+    testWidgets('setGlobalState takes doubles, strings, bools and null', (
+      tester,
+    ) async {
+      Map<String, Object?> point(String kind, Object value) => {
+        'type': 'Feature',
+        'properties': {'kind': kind, 'value': value},
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [0, 0],
+        },
+      };
+      Map<String, Object?> layer(String kind) => {
+        'id': kind,
+        'type': 'circle',
+        'source': 'points',
+        'filter': [
+          'all',
+          [
+            '==',
+            ['get', 'kind'],
+            kind,
+          ],
+          [
+            '==',
+            ['get', 'value'],
+            ['global-state', kind],
+          ],
+        ],
+        'paint': {'circle-radius': 10},
+      };
+      final map = await pumpMap(
+        tester,
+        options: _options(
+          MapStyle.json(
+            jsonEncode({
+              'version': 8,
+              'state': {
+                'number': {'default': 0},
+                'text': {'default': ''},
+                'flag': {'default': false},
+                'reset': {'default': 'default'},
+              },
+              'sources': {
+                'points': {
+                  'type': 'geojson',
+                  'data': {
+                    'type': 'FeatureCollection',
+                    'features': [
+                      point('number', 2.5),
+                      point('text', 'a'),
+                      point('flag', true),
+                      point('reset', 'default'),
+                      point('reset', 'set'),
+                    ],
+                  },
+                },
+              },
+              'layers': [
+                for (final kind in ['number', 'text', 'flag', 'reset'])
+                  layer(kind),
+              ],
+            }),
+          ),
+        ),
+      );
+      Future<Object?> shown(String kind) async {
+        final features = await map.waitForFeatures(
+          map.center,
+          (features) => features.length == 1,
+          layerIds: [kind],
+        );
+        return features.single.properties['value'];
+      }
+
+      await map.style.setGlobalState('number', 2.5);
+      expect(await shown('number'), 2.5);
+      await map.style.setGlobalState('text', 'a');
+      expect(await shown('text'), 'a');
+      await map.style.setGlobalState('flag', true);
+      expect(await shown('flag'), true);
+
+      expect(await shown('reset'), 'default');
+      await map.style.setGlobalState('reset', 'set');
+      await map.waitForFeatures(
+        map.center,
+        (features) =>
+            features.length == 1 &&
+            features.single.properties['value'] == 'set',
+        layerIds: ['reset'],
+      );
+      // null resets the property to the default of the style's state.
+      await map.style.setGlobalState('reset', null);
+      await map.waitForFeatures(
+        map.center,
+        (features) =>
+            features.length == 1 &&
+            features.single.properties['value'] == 'default',
+        layerIds: ['reset'],
+      );
     });
 
     testWidgets('setGlobalState drives global-state expressions', (
