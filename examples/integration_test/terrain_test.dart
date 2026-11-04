@@ -97,8 +97,13 @@ class _Fixture {
 
   /// A URL of [style], which the map has to load before it can parse it,
   /// or of no style, which fails to load, if [style] is null.
-  MapStyle styleUrl(Map<String, Object?>? style) {
-    _styles.add(style == null ? null : jsonEncode(style));
+  MapStyle styleUrl(Map<String, Object?>? style) =>
+      MapStyle.url(jsonUrl(style));
+
+  /// A URL of [json], held like a style, which fails to load if [json] is
+  /// null.
+  String jsonUrl(Object? json) {
+    _styles.add(json == null ? null : jsonEncode(json));
     final path = 'style/${_styles.length - 1}.json';
     if (kIsWeb) {
       // maplibre-gl-js has loaded: the map that gets this URL exists.
@@ -108,9 +113,9 @@ class _Fixture {
         return _styles[int.parse(match[1]!)] ??
             (throw StateError('No style at $url'));
       });
-      return MapStyle.url('fixture://$path');
+      return 'fixture://$path';
     }
-    return MapStyle.url('$_origin/$path');
+    return '$_origin/$path';
   }
 
   Future<void> _serve(HttpRequest request) async {
@@ -225,6 +230,63 @@ void runTests() {
       await map.pumpUntil(
         () => map.style.terrain == _terrain,
         reason: () => 'the terrain is ${map.style.terrain}',
+      );
+    });
+
+    testWidgets('a swap to the same style before the first load completes', (
+      tester,
+    ) async {
+      // On web the fixture's protocol needs maplibre-gl-js, which the first
+      // map loads.
+      await pumpTerrainMap(tester);
+      await tester.pumpWidget(const SizedBox());
+
+      fixture.holdStyles();
+      // The map loads only once the GeoJSON of this style arrives, after the
+      // style itself has loaded.
+      final json = jsonEncode({
+        ...fixture.style(),
+        'sources': {
+          ...fixture.style()['sources']! as Map<String, Object?>,
+          'held': {
+            'type': 'geojson',
+            'data': fixture.jsonUrl({
+              'type': 'FeatureCollection',
+              'features': <Object?>[],
+            }),
+          },
+        },
+      });
+      var created = false;
+      StyleController? loaded;
+      MapApp app(String json) => MapApp(
+        options: _options(MapStyle.json(json)),
+        onMapCreated: (_) => created = true,
+        // The latest style: native loads the swapped style again.
+        onStyleLoaded: (style) => loaded = style,
+      );
+      Future<void> pumpUntil(bool Function() condition, String reason) async {
+        final deadline = DateTime.now().add(defaultTimeout);
+        while (!condition()) {
+          if (DateTime.now().isAfter(deadline)) fail('Timed out: $reason');
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      }
+
+      await tester.pumpWidget(app(json));
+      await pumpUntil(() => created, 'the map was never created');
+      await tester.pump(const Duration(milliseconds: 300));
+      // gl-js hands a style out only once its sources loaded; MapLibre
+      // Native does once it parsed the style.
+      if (kIsWeb) expect(loaded, isNull);
+      // The same style in other JSON text, while the first is loading.
+      await tester.pumpWidget(app('$json\n'));
+      fixture.releaseStyles();
+      await pumpUntil(() => loaded != null, 'the style never loaded');
+      await loaded!.setTerrain(_terrain);
+      await pumpUntil(
+        () => loaded!.terrain == _terrain,
+        'the terrain is ${loaded!.terrain}',
       );
     });
 

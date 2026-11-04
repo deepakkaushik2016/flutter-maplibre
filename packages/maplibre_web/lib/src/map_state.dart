@@ -46,6 +46,11 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// The `style.load` listener of the latest [_setStyle].
   JSExportedDartFunction? _styleLoadListener;
 
+  /// The style generation that the map's `load` event reports: the first
+  /// style's, or that of a swap gl-js diffed into it without changes before
+  /// it loaded.
+  var _firstLoadGeneration = 0;
+
   /// The attributions that the widgets in [MapLibreMap.children] last saw.
   List<String> _attributions = const [];
 
@@ -143,7 +148,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
       _map.on(
         interop.MapEventType.load,
         (interop.MapMouseEvent event) {
-          _onStyleLoaded(0);
+          _onStyleLoaded(_firstLoadGeneration);
         }.toJS,
       );
       _map.on(
@@ -793,16 +798,22 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     _onLoadingStarted();
     // gl-js diffs a JSON style at once. A diff without changes, or a style
     // that fails to validate, keeps the loaded style and fires no
-    // `style.load`, so the terrain set meanwhile goes to that style.
+    // `style.load`, so the terrain set meanwhile goes to that style. Before
+    // the first style was handed out, its `load` event hands it out and
+    // ends the wait instead.
     if (style is MapStyleJson &&
         _deferredTerrain.loading &&
         identical(_styleLoadListener, listener) &&
         _map.style.strictEquals(before).toDart) {
       _map.off(interop.MapEventType.styleLoad, listener);
       _styleLoadListener = null;
-      unawaited(
-        _deferredTerrain.styleLoaded(generation, this.style!.applyTerrain),
-      );
+      if (this.style case final current?) {
+        unawaited(
+          _deferredTerrain.styleLoaded(generation, current.applyTerrain),
+        );
+      } else {
+        _firstLoadGeneration = generation;
+      }
     }
   }
 
