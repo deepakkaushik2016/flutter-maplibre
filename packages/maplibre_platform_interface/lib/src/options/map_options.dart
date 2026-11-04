@@ -98,6 +98,9 @@ class MapOptions {
   /// The camera then looks at the ground under its center and stays above
   /// the ground. If false, the center stays at sea level, and a pitched
   /// camera over high ground can end up under the ground and show nothing.
+  ///
+  /// A change applies at once on native, and from the next camera change on
+  /// web, as in maplibre-gl-js.
   final bool centerClampedToGround;
 
   @override

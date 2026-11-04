@@ -591,6 +591,10 @@ Each entry: the decision, then why.
 - **Web leaves the terrain camera to gl-js.** gl-js clamps the center by
   default (`centerClampedToGround` is passed to the `Map`), and its
   projection follows the terrain, so the web sink is unchanged.
+  `setCenterClampedToGround` only stores the flag: gl-js clamps from the
+  next camera or terrain change on, while native applies a change at once.
+  The web state doesn't nudge the camera to match, as a jump would also
+  stop a running animation.
 - **On web, Flutter is the only hit-tester.** The gl-js map is created with
   `interactive: false` and its container has `pointer-events: none`, so the
   browser hands every pointer to Flutter, and widgets over the map no longer

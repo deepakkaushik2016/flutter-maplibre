@@ -34,6 +34,14 @@ void runTests() {
     });
     tearDown(() async => fixture.close());
 
+    /// The options of a map at the Alps camera over the synthetic ridge.
+    MapOptions terrainOptions({bool centerClampedToGround = true}) =>
+        MapOptions(
+          style: MapStyle.json(jsonEncode(fixture.style())),
+          initCamera: alpsCamera,
+          centerClampedToGround: centerClampedToGround,
+        );
+
     /// A map over the synthetic ridge with its terrain, once the camera
     /// settled on it.
     Future<(TestMap, GroundView)> pumpTerrainMap(
@@ -42,11 +50,7 @@ void runTests() {
     }) async {
       final map = await pumpMap(
         tester,
-        options: MapOptions(
-          style: MapStyle.json(jsonEncode(fixture.style())),
-          initCamera: alpsCamera,
-          centerClampedToGround: centerClampedToGround,
-        ),
+        options: terrainOptions(centerClampedToGround: centerClampedToGround),
       );
       await map.style.setTerrain(_terrain);
       final ground = GroundView(map);
@@ -140,6 +144,37 @@ void runTests() {
       debugPrint('unclamped camera center on screen: $shown');
       // At sea level under the ridge, far behind the ground on screen.
       expect((shown - map.center).distance, greaterThan(100));
+    });
+
+    testWidgets('the clamp turns on and off on a running map', (tester) async {
+      final (map, ground) = await pumpTerrainMap(
+        tester,
+        centerClampedToGround: false,
+      );
+      double offGround() =>
+          (ground.toScreen(map.controller.camera!.center) - map.center)
+              .distance;
+      expect(offGround(), greaterThan(100));
+      // Over lower ground, 2.8 km south of the crest, and back. On web the
+      // clamp applies from the next camera change on, so each change of the
+      // option is followed by a move.
+      const slope = Geographic(lon: alpsLng, lat: alpsLat - 0.025);
+      const crest = Geographic(lon: alpsLng, lat: alpsLat);
+      Future<void> moveTo(Geographic center) async {
+        await map.controller.moveCamera(CameraUpdate.position(center: center));
+        await map.waitForLatestFrame();
+        await fixture.waitUntilSettled(map, ground);
+      }
+
+      await map.setOptions(terrainOptions());
+      await moveTo(slope);
+      expect(offGround(), lessThan(2));
+
+      await map.setOptions(terrainOptions(centerClampedToGround: false));
+      // The center keeps the slope's height.
+      await moveTo(crest);
+      debugPrint('center after a move unclamped: ${offGround()} px off');
+      expect(offGround(), greaterThan(20));
     });
 
     testWidgets(
