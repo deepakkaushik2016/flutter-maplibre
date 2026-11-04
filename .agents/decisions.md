@@ -565,6 +565,29 @@ Each entry: the decision, then why.
   it for every style, and it applies only while the style has a terrain.
   Without it, a pitched camera over high ground can sit under the ground and
   show nothing.
+- **Native gestures over a terrain move the ground under the fingers.**
+  A pan moves the plane at the center's height, so the center has to be on
+  the ground the gesture grabs: the clamp (above) keeps it there between
+  gestures, and `gestureStart` and `zoomBy` call
+  `anchorCenterOnTerrain` once, only when the style has a terrain, and never
+  per frame; the map holds the center's height during a gesture and
+  anchors it again at the end, keeping the view. Measured over the
+  synthetic ridge (zoom 13, pitch 60, ×1.25): a 200 px drag ends 150–155 px
+  off without the clamp and the anchor, 5 px with them (see Known gaps for
+  the rest). The drag makes 13 calls (anchor, begin, 10 steps, end) instead
+  of 12.
+- **Native `zoomBy` over a terrain runs as a gesture with the clamp off.**
+  MapLibre Native treats an animated or immediate scale delta as a camera
+  change of the app: it eases the center's height to the ground of the new
+  center and then jumps the center onto it, which moved a double tap's
+  ground 23 px. With the clamp off and the gesture phase begun, the center
+  keeps its height, which keeps the whole line of sight through the zoom's
+  anchor in place (0.3–0.5 px). The animation's end handler turns the clamp
+  back on while the gesture still runs, so the gesture's end puts the
+  center on the ground keeping the view. Five calls per zoom (anchor, clamp
+  off, zoom, clamp on, end) instead of one, none per frame. A later
+  `zoomBy` takes the hold over; a user gesture running at the end ends it
+  itself. Without a terrain, or with the clamp off, `zoomBy` is unchanged.
 - **Web leaves the terrain camera to gl-js.** gl-js clamps the center by
   default (`centerClampedToGround` is passed to the `Map`), and its
   projection follows the terrain, so the web sink is unchanged.
@@ -758,6 +781,21 @@ Each entry: the decision, then why.
   feature queries). gl-js projects onto the terrain. So on native a widget
   placed with `toScreenLocation` over high ground sits off the ground it
   marks, and `MapEventClick.point` is the sea-level point.
+- MapLibre Native's pan over a terrain moves the center about 6 m along the
+  view per `mln_map_apply_camera_delta` call, whatever its offset (zoom 13,
+  pitch 60, center 2875 m high): 0.5 px per pointer move, 5 px for a 200 px
+  drag in 10 moves, 20 px in 40. Likely cause: `Camera::getWorldToCamera`
+  converts meters at the eye's latitude, `TransformState` the center's
+  altitude at the center's latitude, so the plane `moveBy` unprojects onto
+  is slightly off the center. Flat maps don't drift.
+- After a zoom over a slope, MapLibre Native's anchor at a gesture's end
+  sometimes leaves the center off the ground it looks at (2 of 12 runs
+  7.6 px off on the Android emulator, once not anchored at all). The
+  zoomed-in-on ground stays in place; the next gesture anchors again.
+- On web, gl-js's terrain camera moves the grabbed ground during gestures:
+  22 px for the 200 px drag of `terrain_gestures_test.dart` and 53 px for
+  its double tap. The web sink is unchanged, and those two tests run on
+  native only.
 - The C API has no setter for the offline tile count limit and no automatic
   database packing, so `setOfflineTileCountLimit` and
   `runPackDatabaseAutomatically` were removed from the `OfflineManager`.

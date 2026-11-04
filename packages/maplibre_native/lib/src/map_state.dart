@@ -548,6 +548,15 @@ class MapLibreMapStateNative extends MapLibreMapState {
 
   // Gestures
 
+  /// Moves the camera's center onto the terrain it looks at, keeping the
+  /// view, so the gesture that follows moves, zooms and turns the ground
+  /// under the fingers, not a plane at the center's old height. Once per
+  /// gesture: the map holds that height while the gesture runs.
+  void _anchorOnTerrain() {
+    if (style?.terrain == null) return;
+    _map?.discarding.anchorCenterOnTerrain();
+  }
+
   /// Applies [delta] without waiting for it, in order with later commands.
   void _applyDelta(mln.CameraDelta delta) =>
       _map?.discarding.applyCameraDelta(delta);
@@ -935,7 +944,8 @@ class _NativeGestureCamera implements GestureCameraSink {
     _state
       .._cancelAnimation()
       .._gestureActive = true
-      .._nextChangeReason = CameraChangeReason.gesture;
+      .._nextChangeReason = CameraChangeReason.gesture
+      .._anchorOnTerrain();
     _state._applyDelta(
       const mln.CameraDelta(gesturePhase: mln.GesturePhase.begin),
     );
@@ -1005,15 +1015,38 @@ class _NativeGestureCamera implements GestureCameraSink {
     );
   }
 
+  /// Zooms around [around], keeping the ground there in place over a
+  /// terrain.
+  ///
+  /// The map would ease the center's height to the ground of the zoom's new
+  /// center during an animation, and put the center on that ground once the
+  /// zoom ends, both of which move the camera off the ground being zoomed
+  /// in on. So, while the clamp of [MapOptions.centerClampedToGround] is on,
+  /// the zoom turns it off and runs as a gesture: the center keeps its
+  /// height, which keeps the whole line of sight through [around] in place,
+  /// and the gesture's end puts the center on the ground keeping the view.
+  /// Five calls per zoom (the anchor, the clamp twice, the zoom and the
+  /// gesture's end), none per frame.
   @override
   void zoomBy(
     double levels,
     Offset around, {
     Duration duration = Duration.zero,
   }) {
+    final map = _state._map;
+    if (map == null) return;
     _state
       .._cancelAnimation()
-      .._nextChangeReason = CameraChangeReason.gesture;
+      .._nextChangeReason = CameraChangeReason.gesture
+      .._anchorOnTerrain();
+    final holds =
+        _state.style?.terrain != null && _state.options.centerClampedToGround;
+    final zoom = ++_zoom;
+    if (holds) {
+      map.discarding.setTerrainOptions(
+        const mln.MapTerrainOptions(centerClampedToGround: false),
+      );
+    }
     _state._applyDelta(
       mln.CameraDelta(
         scale: pow(2, levels).toDouble(),
@@ -1022,8 +1055,30 @@ class _NativeGestureCamera implements GestureCameraSink {
             ? const mln.AnimationOptions()
             : mln.AnimationOptions(
                 durationMs: duration.inMilliseconds.toDouble(),
+                endHandler: holds ? (_) => _endZoom(zoom) : null,
               ),
+        gesturePhase: holds ? mln.GesturePhase.begin : mln.GesturePhase.none,
       ),
+    );
+    if (holds && duration == Duration.zero) _endZoom(zoom);
+  }
+
+  /// Counts [zoomBy] calls, so only the latest zoom ends the hold.
+  var _zoom = 0;
+
+  /// Ends the hold of the center's height that [zoomBy] started, unless a
+  /// later zoom took it over. A gesture that runs meanwhile ends it itself.
+  void _endZoom(int zoom) {
+    final map = _state._map;
+    if (map == null || zoom != _zoom) return;
+    map.discarding.setTerrainOptions(
+      mln.MapTerrainOptions(
+        centerClampedToGround: _state.options.centerClampedToGround,
+      ),
+    );
+    if (_state._gestureActive) return;
+    _state._applyDelta(
+      const mln.CameraDelta(gesturePhase: mln.GesturePhase.end),
     );
   }
 }
