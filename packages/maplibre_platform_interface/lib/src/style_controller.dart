@@ -270,9 +270,9 @@ abstract class StyleController {
   /// terrain set while a new style loads is applied once it has loaded, and
   /// the future completes then.
   ///
-  /// On web, the future fails if the style has no source with the ID
-  /// [Terrain.sourceId]. MapLibre Native takes such a terrain and renders it
-  /// once the source is added.
+  /// The future fails with a [StateError] if the style has no source with
+  /// the ID [Terrain.sourceId] when the terrain is applied. A terrain set
+  /// while a style loads is checked against that style.
   Future<void> setTerrain(Terrain? terrain);
 
   /// The 3D terrain of the style, or null if it has none.

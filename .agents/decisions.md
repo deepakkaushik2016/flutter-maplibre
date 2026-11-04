@@ -709,9 +709,11 @@ Each entry: the decision, then why.
   encoded again. Newer data cancels data that isn't ready yet, which
   `setGeoJsonData` treats as done.
 - `mln_map_set_style_terrain_json` takes a terrain whose source the style
-  lacks, and renders it once the source is added; MapLibre GL JS throws. So
-  `setTerrain` fails with a "missing" source error only on web. Native leaves
-  the check to the C API, which defines this on purpose.
+  lacks, and renders it once the source is added; MapLibre GL JS throws.
+  `StyleControllerNative.setTerrain` checks the source in its `StyleSources`
+  cache first (one map lookup, no call to the map) and throws the same
+  `StateError` as web, so a terrain on a missing source fails on every
+  platform. Removing the terrain checks nothing.
 - The C API has no setter for the offline tile count limit and no automatic
   database packing, so `setOfflineTileCountLimit` and
   `runPackDatabaseAutomatically` were removed from the `OfflineManager`.

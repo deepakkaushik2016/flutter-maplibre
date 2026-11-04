@@ -52,11 +52,15 @@ class _Fixture {
       ? Uri.base.resolve('assets/$_demAsset').toString()
       : '$_origin/dem.png';
 
-  /// A style with the raster DEM source `dem` and a background of [color].
-  Map<String, Object?> style({String color = '#dddddd'}) => {
+  /// A style with the raster DEM source [demId] and a background of
+  /// [color].
+  Map<String, Object?> style({
+    String color = '#dddddd',
+    String demId = 'dem',
+  }) => {
     'version': 8,
     'sources': {
-      'dem': {
+      demId: {
         'type': 'raster-dem',
         'tiles': [demTile],
         'tileSize': 256,
@@ -152,16 +156,20 @@ void runTests() {
       final map = await pumpTerrainMap(tester);
       final oldStyle = map.style;
       final since = map.styleLoads;
+      // Only the new style has the source of the terrain.
       await map.setOptions(
-        _options(fixture.styleUrl(fixture.style(color: '#bbddff'))),
+        _options(
+          fixture.styleUrl(fixture.style(color: '#bbddff', demId: 'dem-new')),
+        ),
       );
       // The new style is still loading: it comes from a URL.
-      final applied = oldStyle.setTerrain(_terrain);
+      const terrain = Terrain(sourceId: 'dem-new', exaggeration: 1.25);
+      final applied = oldStyle.setTerrain(terrain);
       await map.waitForStyleLoad(since: since);
       await map.pumpFuture(applied, reason: 'setTerrain never completed');
       await tester.pump();
       expect(map.style, isNot(same(oldStyle)));
-      expect(map.style.terrain, _terrain);
+      expect(map.style.terrain, terrain);
     });
 
     testWidgets('a new style drops the terrain', (tester) async {
@@ -178,24 +186,17 @@ void runTests() {
 
     testWidgets('a terrain on a source the style lacks', (tester) async {
       final map = await pumpTerrainMap(tester);
-      const missing = Terrain(sourceId: 'not-in-style');
-      if (kIsWeb) {
-        // MapLibre GL JS rejects it.
-        await expectLater(
-          map.style.setTerrain(missing),
-          throwsA(
-            predicate<Object>(
-              (error) => error.toString().contains('missing'),
-              'an error whose message contains "missing"',
-            ),
+      await expectLater(
+        map.style.setTerrain(const Terrain(sourceId: 'not-in-style')),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('missing'),
           ),
-        );
-        expect(map.style.terrain, isNull);
-      } else {
-        // MapLibre Native takes it, and renders it once the source exists.
-        await map.style.setTerrain(missing);
-        expect(map.style.terrain, missing);
-      }
+        ),
+      );
+      expect(map.style.terrain, isNull);
     });
 
     testWidgets('setGlobalState drives global-state expressions', (
