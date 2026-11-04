@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
+import 'shared/alps_fixture.dart';
 import 'shared/browser.dart';
 import 'shared/test_map.dart';
 
@@ -549,4 +551,178 @@ void runTests() {
       expect(features.single.properties['i'], 7);
     });
   });
+
+  group('terrain elevation', () {
+    late AlpsFixture fixture;
+    setUp(() async {
+      clearResourceTimings();
+      fixture = await AlpsFixture.start();
+    });
+    tearDown(() async => fixture.close());
+
+    /// A map at the Alps camera over the synthetic ridge, with its terrain
+    /// drawn [exaggeration] times once the camera settled on it, or without
+    /// a terrain if [exaggeration] is null.
+    Future<TestMap> pumpAlpsMap(
+      WidgetTester tester, {
+      double? exaggeration,
+    }) async {
+      final map = await pumpMap(
+        tester,
+        options: MapOptions(
+          style: MapStyle.json(jsonEncode(fixture.style())),
+          initCamera: alpsCamera,
+        ),
+      );
+      if (exaggeration != null) {
+        await map.style.setTerrain(
+          Terrain(sourceId: 'alps', exaggeration: exaggeration),
+        );
+        await fixture.waitUntilSettled(
+          map,
+          GroundView(map, exaggeration: exaggeration),
+        );
+      }
+      return map;
+    }
+
+    for (final exaggeration in const [1.0, 1.5]) {
+      testWidgets('reads the drawn height at exaggeration $exaggeration', (
+        tester,
+      ) async {
+        final map = await pumpAlpsMap(tester, exaggeration: exaggeration);
+        for (final MapEntry(key: name, value: point) in _groundPoints.entries) {
+          final drawn = _drawnHeight(point, exaggeration);
+          final measured = await map.controller.queryTerrainElevation(point);
+          debugPrint(
+            'elevation of the $name at $exaggeration: $measured m, '
+            'drawn ${drawn.toStringAsFixed(2)} m',
+          );
+          expect(measured, isNotNull, reason: 'the $name');
+          expect(measured, closeTo(drawn, 2), reason: 'the $name');
+        }
+      });
+    }
+
+    testWidgets('is null without a terrain', (tester) async {
+      final map = await pumpAlpsMap(tester);
+      final ridge = _groundPoints['ridge']!;
+      expect(await map.controller.queryTerrainElevation(ridge), isNull);
+
+      await map.style.setTerrain(const Terrain(sourceId: 'alps'));
+      await fixture.waitUntilSettled(map, GroundView(map, exaggeration: 1));
+      expect(await map.controller.queryTerrainElevation(ridge), isNotNull);
+
+      await map.style.setTerrain(null);
+      await map.waitForLatestFrame();
+      expect(await map.controller.queryTerrainElevation(ridge), isNull);
+    });
+
+    testWidgets('is null where no DEM tile has loaded', (tester) async {
+      final map = await pumpAlpsMap(tester, exaggeration: 1);
+      for (final point in const [
+        // East of the vendored tiles, whose server answers 404 there.
+        Geographic(lon: alpsLng + 0.8, lat: alpsLat),
+        // Far from them.
+        Geographic(lon: 0, lat: 0),
+      ]) {
+        expect(
+          await map.controller.queryTerrainElevation(point),
+          isNull,
+          reason: '$point',
+        );
+      }
+    });
+
+    testWidgets('reads a loaded DEM tile out of view', (tester) async {
+      final map = await pumpAlpsMap(tester, exaggeration: 1);
+      // On the slope 5 km behind the camera, in the DEM tile under it.
+      const point = Geographic(lon: alpsLng, lat: alpsLat - 5 / _kmPerDegree);
+      final measured = await map.controller.queryTerrainElevation(point);
+      final drawn = _drawnHeight(point, 1);
+      debugPrint(
+        'elevation 5 km behind the camera: $measured m, '
+        'drawn ${drawn.toStringAsFixed(2)} m',
+      );
+      expect(measured, closeTo(drawn, 2));
+    });
+
+    testWidgets('completes before the first frame', (tester) async {
+      final style = {
+        ...fixture.style(),
+        'terrain': {'source': 'alps'},
+      };
+      final query = Completer<Future<double?>>();
+      await tester.pumpWidget(
+        MapApp(
+          options: MapOptions(
+            style: MapStyle.json(jsonEncode(style)),
+            initCamera: alpsCamera,
+          ),
+          onMapCreated: (controller) => query.complete(
+            controller.queryTerrainElevation(_groundPoints['ridge']!),
+          ),
+        ),
+      );
+      final deadline = DateTime.now().add(defaultTimeout);
+      while (!query.isCompleted) {
+        if (DateTime.now().isAfter(deadline)) fail('the map was not created');
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      var done = false;
+      double? measured;
+      unawaited(
+        query.future.then((elevation) async {
+          measured = await elevation;
+          done = true;
+        }),
+      );
+      final until = DateTime.now().add(defaultTimeout);
+      while (!done) {
+        if (DateTime.now().isAfter(until)) fail('the query never completed');
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      debugPrint('elevation before the first frame: $measured');
+      expect(measured, anyOf(isNull, closeTo(alpsSummit, 2)));
+    });
+  });
 }
+
+/// Kilometers per degree of latitude on the sphere of `alps_dem.dart`.
+const double _kmPerDegree = 6371.0088 * pi / 180;
+
+/// The height in meters that the map draws at [point] of the synthetic
+/// ridge, with [exaggeration].
+///
+/// The fixture's tiles place DEM pixel i at i/256 of the tile, as MapLibre
+/// Native draws it. maplibre-gl-js draws pixel i at its centre, (i + 0.5)/256,
+/// so the same tiles draw each height half a DEM pixel (52 m) further
+/// south-east there.
+double _drawnHeight(Geographic point, double exaggeration) {
+  var lat = point.lat;
+  var lng = point.lon;
+  if (kIsWeb) {
+    const halfPixel = 0.5 / 256;
+    const tiles = 1 << alpsDemZoom;
+    final x = (lng + 180) / 360 * tiles;
+    final y = (1 - log(tan(pi / 4 + lat * pi / 360)) / pi) / 2 * tiles;
+    (:lat, :lng) = tilePointLatLng(
+      alpsDemZoom,
+      0,
+      0,
+      x - halfPixel,
+      y - halfPixel,
+    );
+  }
+  return alpsHeight(lat, lng) * exaggeration;
+}
+
+/// Points of the synthetic ridge ahead of the Alps camera, which looks north.
+const Map<String, Geographic> _groundPoints = {
+  'ridge': Geographic(lon: alpsLng, lat: alpsLat),
+  'slope': Geographic(lon: alpsLng + 0.01, lat: alpsLat + 3 / _kmPerDegree),
+  'valley floor': Geographic(
+    lon: alpsLng - 0.01,
+    lat: alpsLat + 12 / _kmPerDegree,
+  ),
+};
