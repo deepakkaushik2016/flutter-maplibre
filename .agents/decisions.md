@@ -587,7 +587,10 @@ Each entry: the decision, then why.
   center on the ground keeping the view. Five calls per zoom (anchor, clamp
   off, zoom, clamp on, end) instead of one, none per frame. A later
   `zoomBy` takes the hold over; a user gesture running at the end ends it
-  itself. Without a terrain, or with the clamp off, `zoomBy` is unchanged.
+  itself. With the clamp off, `zoomBy` only adds the anchor; without a
+  terrain it is unchanged. This hold is a temporary workaround: engine
+  Task 15 fixes zooming under the clamp at the root, and `zoomBy` then only
+  anchors.
 - **Web leaves the terrain camera to gl-js.** gl-js clamps the center by
   default (`centerClampedToGround` is passed to the `Map`), and its
   projection follows the terrain, so the web sink is unchanged.

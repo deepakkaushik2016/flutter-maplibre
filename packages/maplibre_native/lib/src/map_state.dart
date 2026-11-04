@@ -1026,7 +1026,11 @@ class _NativeGestureCamera implements GestureCameraSink {
   /// height, which keeps the whole line of sight through [around] in place,
   /// and the gesture's end puts the center on the ground keeping the view.
   /// Five calls per zoom (the anchor, the clamp twice, the zoom and the
-  /// gesture's end), none per frame.
+  /// gesture's end), none per frame. Without a terrain or with the clamp
+  /// off, only the anchor (with a terrain) is added.
+  ///
+  /// The hold is a temporary workaround: engine Task 15 makes a zoom keep
+  /// its anchor's ground under the clamp, after which [zoomBy] only anchors.
   @override
   void zoomBy(
     double levels,
@@ -1041,6 +1045,8 @@ class _NativeGestureCamera implements GestureCameraSink {
       .._anchorOnTerrain();
     final holds =
         _state.style?.terrain != null && _state.options.centerClampedToGround;
+    // Temporary workaround until engine Task 15 (see above): hold the
+    // center's height with the clamp off during the zoom.
     final zoom = ++_zoom;
     if (holds) {
       map.discarding.setTerrainOptions(
