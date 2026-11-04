@@ -28,6 +28,9 @@ class MapLibreMapStateNative extends MapLibreMapState {
   /// style, see [_setUp].
   var _constraintsAfterStyle = false;
 
+  /// Holds a terrain set while [_setStyle] loads a style.
+  final _deferredTerrain = DeferredTerrain();
+
   /// A projection of the latest published camera. Closed whenever the camera
   /// or extent changes, because a projection never sees later map changes.
   mln.MapProjectionHandle? _projection;
@@ -487,6 +490,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
     late final StyleControllerNative styleController;
     styleController = StyleControllerNative(
       map,
+      _deferredTerrain,
       // Rebuilds the widgets in MapLibreMap.children, such as
       // SourceAttribution.
       onAttributionsChanged: () {
@@ -495,8 +499,14 @@ class MapLibreMapStateNative extends MapLibreMapState {
     );
     _loadingStyle = styleController;
     // The style is only handed out once its layers and sources are known.
+    bool stale() => _disposed || _loadingStyle != styleController;
     await styleController.load();
-    if (_disposed || _loadingStyle != styleController) {
+    if (!stale()) {
+      // Before the style is handed out, so its terrain is the one set while
+      // it loaded.
+      await _deferredTerrain.styleLoaded(styleController.applyTerrain);
+    }
+    if (stale()) {
       styleController.dispose();
       return;
     }
@@ -789,6 +799,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
     final request = ++_styleRequest;
     bool stale() => _map != map || request != _styleRequest;
     layerManager = null;
+    _deferredTerrain.styleLoading();
     final Future<mln.CommandCompletion> load;
     switch (style) {
       case MapStyleJson(:final json):

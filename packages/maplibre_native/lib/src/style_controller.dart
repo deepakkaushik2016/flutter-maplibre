@@ -12,9 +12,20 @@ import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 /// them in.
 class StyleControllerNative extends StyleController implements StyleBackend {
   /// Creates a style controller for a map.
-  StyleControllerNative(this._map, {this.onAttributionsChanged});
+  StyleControllerNative(
+    this._map,
+    this._deferredTerrain, {
+    this.onAttributionsChanged,
+  });
 
   final mln.MapHandle _map;
+
+  /// Holds a terrain set while the map loads a new style.
+  final DeferredTerrain _deferredTerrain;
+
+  /// The terrain of the style, kept here as the C API reads it only
+  /// asynchronously.
+  Terrain? _terrain;
 
   /// Called when [refreshAttributions] finds that the attributions changed.
   final VoidCallback? onAttributionsChanged;
@@ -38,6 +49,9 @@ class StyleControllerNative extends StyleController implements StyleBackend {
     }
     if (style case {'layers': final List<Object?> styleLayers}) {
       layers.load(styleLayers.whereType<Map<String, Object?>>());
+    }
+    if (style case {'terrain': final Map<String, Object?> terrain}) {
+      _terrain = _terrainOf(terrain);
     }
     await refreshAttributions();
   }
@@ -380,16 +394,32 @@ class StyleControllerNative extends StyleController implements StyleBackend {
 
   static var _warnedProjection = false;
 
-  @override
-  Future<void> setTerrain(Terrain? terrain) =>
-      throw UnimplementedError('setTerrain: implemented in a later task');
+  static Terrain? _terrainOf(Map<String, Object?> json) => switch (json) {
+    {'source': final String sourceId, 'exaggeration': final num exaggeration} =>
+      Terrain(sourceId: sourceId, exaggeration: exaggeration.toDouble()),
+    {'source': final String sourceId} => Terrain(sourceId: sourceId),
+    _ => null,
+  };
 
   @override
-  Terrain? get terrain => null;
+  Future<void> setTerrain(Terrain? terrain) async {
+    if (_deferredTerrain.defer(terrain) case final applied?) return applied;
+    await applyTerrain(terrain);
+  }
+
+  /// Sets [terrain] on the map now. JSON null removes the terrain.
+  Future<void> applyTerrain(Terrain? terrain) async {
+    await _map.setStyleTerrainJson(terrain?.toJson());
+    _terrain = terrain;
+  }
 
   @override
-  Future<void> setGlobalState(String key, Object? value) =>
-      throw UnimplementedError('setGlobalState: implemented in a later task');
+  Terrain? get terrain => _terrain;
+
+  @override
+  Future<void> setGlobalState(String key, Object? value) async {
+    await _map.setGlobalStateProperty(key, value);
+  }
 
   @override
   void dispose() {

@@ -433,6 +433,16 @@ Each entry: the decision, then why.
   update per frame re-encodes the data in Dart, parses and indexes it on the
   UI thread (`geojsonSourceDataCreate` is synchronous) and re-tiles the
   source; a paint change does none of that.
+- **A terrain set while a new style loads waits for it (`DeferredTerrain`),
+  and is applied before the style is handed out.** Loading a style replaces
+  the terrain with the style's own on both platforms (MapLibre Native parses
+  it over the old one, gl-js diffs it away), so a terrain set during a style
+  swap would otherwise be lost. A new style starts with the terrain of its
+  document.
+- **Native keeps the terrain of the style in the controller.** The C getter
+  is asynchronous and `StyleController.terrain` is not, so the controller
+  takes it from the loaded style JSON it already reads on load and from each
+  `setTerrain`; reading it costs no call. Web reads `map.getTerrain()`.
 
 ## Gestures
 
@@ -698,6 +708,10 @@ Each entry: the decision, then why.
   still `jsonEncode`s it, so `GeoJsonData.text` is decoded in Dart and
   encoded again. Newer data cancels data that isn't ready yet, which
   `setGeoJsonData` treats as done.
+- `mln_map_set_style_terrain_json` takes a terrain whose source the style
+  lacks, and renders it once the source is added; MapLibre GL JS throws. So
+  `setTerrain` fails with a "missing" source error only on web. Native leaves
+  the check to the C API, which defines this on purpose.
 - The C API has no setter for the offline tile count limit and no automatic
   database packing, so `setOfflineTileCountLimit` and
   `runPackDatabaseAutomatically` were removed from the `OfflineManager`.

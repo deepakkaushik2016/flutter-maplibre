@@ -1,3 +1,12 @@
+## Unreleased
+
+### Features
+
+- 3D terrain: `StyleController.setTerrain(Terrain(sourceId: …))` raises the
+  map by a raster DEM source, `StyleController.terrain` reads it back, and
+  `StyleController.setGlobalState` sets what `global-state` expressions read,
+  on web and native.
+
 ## 0.4.0-pre.2
 
 The second pre-release of 0.4 reworks the event, camera, query and gesture
