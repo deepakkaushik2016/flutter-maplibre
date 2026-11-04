@@ -108,20 +108,27 @@ class AlpsFixture {
   Future<void> close() async => _server?.close(force: true);
 
   /// Waits until the map has loaded DEM tiles and its view of the ground
-  /// stopped changing, as when the camera's center settles on the terrain.
-  Future<void> waitUntilSettled(TestMap map, GroundView ground) async {
+  /// stopped changing, as when the camera's center settles on the terrain:
+  /// until the ground at the screen's center when the wait starts stays
+  /// within 0.5 px on screen for [frames] pumped frames in a row.
+  Future<void> waitUntilSettled(
+    TestMap map,
+    GroundView ground, {
+    int frames = 10,
+  }) async {
     await map.pumpUntil(
       () => demRequests > 0,
       reason: () => 'the terrain never loaded the DEM',
     );
-    Offset? last;
+    final point = ground.groundAt(map.center);
+    var last = ground.toScreen(point);
     var stable = 0;
     await map.pumpUntil(() {
-      final now = ground.toScreen(ground.groundAt(map.center));
-      stable = last != null && (now - last!).distance < 0.01 ? stable + 1 : 0;
+      final now = ground.toScreen(point);
+      stable = (now - last).distance < 0.5 ? stable + 1 : 0;
       last = now;
-      return stable >= 10;
-    }, reason: () => 'the view of the ground kept changing');
+      return stable >= frames;
+    }, reason: () => 'the ground at $point kept moving, last at $last');
   }
 }
 
@@ -162,10 +169,11 @@ class GroundView {
     // How far from the eye towards seaLevel, 0 to 1, and whether the line of
     // sight is under the ground there.
     Offset at(double t) => eye.position + (seaLevel - eye.position) * t;
-    bool under(double t) =>
-        eye.z * (1 - t) <=
-        alpsHeight(eye.geographic(at(t)).lat, eye.geographic(at(t)).lon) *
-            exaggeration;
+    bool under(double t) {
+      final point = eye.geographic(at(t));
+      return eye.z * (1 - t) <= alpsHeight(point.lat, point.lon) * exaggeration;
+    }
+
     const steps = 2000;
     var below = 1.0;
     for (var i = 1; i <= steps; i++) {
