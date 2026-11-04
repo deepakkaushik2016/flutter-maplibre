@@ -722,10 +722,25 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   Future<void> setTerrainLoadMode(TerrainLoadMode mode) async {}
 
   @override
-  Future<double?> queryTerrainElevation(Geographic point) =>
-      throw UnimplementedError(
-        'queryTerrainElevation: implemented in a later task',
-      );
+  Future<double?> queryTerrainElevation(Geographic point) async {
+    final lngLat = point.toJs();
+    final elevation = _map.queryTerrainElevation(lngLat)?.toDouble();
+    // maplibre-gl-js also gives 0 where no DEM tile has loaded, so only a 0
+    // needs its DEM state.
+    if (elevation != 0) return elevation;
+    final terrain = _map.terrain;
+    // Before 6.15.0, maplibre-gl-js cannot tell 0 m from no DEM tile.
+    if (terrain == null || !terrain.has('getElevationAndDEMStateForLngLat')) {
+      return null;
+    }
+    // The camera's tile zoom, as maplibre-gl-js computes it.
+    final tileZoom = max(0, _map.getZoom().floor());
+    final state = terrain.getElevationAndDEMStateForLngLat(
+      interop.LngLatInstance(point.lon, point.lat),
+      tileZoom,
+    );
+    return state.demState == 'loaded' ? state.elevation.toDouble() : null;
+  }
 
   @override
   Future<List<SourceFeature>> getClusterChildren(

@@ -135,6 +135,16 @@ extension type JsMap._(Camera _) implements Camera {
   /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#getterrain
   external JSObject? getTerrain();
 
+  /// The height of the terrain at [lngLat] in meters as it is drawn, with
+  /// its exaggeration, or null without a terrain. It is also 0 where no DEM
+  /// tile has loaded.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#queryterrainelevation
+  external num? queryTerrainElevation(LngLat lngLat);
+
+  /// The 3D terrain of the map, or null.
+  external JsTerrain? get terrain;
+
   /// Sets the global state property [name] that `global-state` expressions
   /// read.
   ///
@@ -355,4 +365,32 @@ extension type StyleSwapOptions._(JSObject _) implements JSObject {
     /// and building the given one instead of attempting a diff-based update.
     bool? diff,
   });
+}
+
+/// A maplibre-gl-js `LngLat`, for the calls that use its methods rather than
+/// read a [LngLat] object.
+@JS('LngLat')
+extension type LngLatInstance._(JSObject _) implements JSObject {
+  /// Creates a `LngLat` of [lng] and [lat].
+  external LngLatInstance(num lng, num lat);
+}
+
+/// The 3D terrain of a [JsMap].
+extension type JsTerrain._(JSObject _) implements JSObject {
+  /// [JsMap.queryTerrainElevation]'s height at [lngLat], and whether the DEM
+  /// tile it reads has loaded, for a camera at the tile zoom [tileZoom].
+  /// Since maplibre-gl-js 6.15.0.
+  external ElevationAndDemState getElevationAndDEMStateForLngLat(
+    LngLatInstance lngLat,
+    num tileZoom,
+  );
+}
+
+/// The result of [JsTerrain.getElevationAndDEMStateForLngLat].
+extension type ElevationAndDemState._(JSObject _) implements JSObject {
+  /// The height in meters, with the exaggeration.
+  external num get elevation;
+
+  /// `loaded`, `loading` or `none`.
+  external String get demState;
 }
