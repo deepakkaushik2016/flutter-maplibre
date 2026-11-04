@@ -22,6 +22,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
   flutter_test: { sdk: flutter }
   integration_test: { sdk: flutter }
+  maplibre_native: ^0.4.0-pre.2
   very_good_analysis: ^10.0.0
 
 flutter:
@@ -32,6 +33,9 @@ flutter:
     - assets/geojson/
     - assets/tiles/
     - assets/terrain/
+    - assets/terrain/alps/10/543/
+    - assets/terrain/alps/10/544/
+    - assets/terrain/alps/10/545/
 
 flutter_launcher_icons:
   android: "ic_launcher"

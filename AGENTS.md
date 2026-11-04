@@ -52,7 +52,9 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
 - `examples/`: the reference app, which also runs the integration tests on
   every platform. `integration_test/all_test.dart` runs them all in one
   launch; `integration_test/shared/test_map.dart` pumps a map and waits for
-  its events, frames and features.
+  its events, frames and features. `integration_test/shared/alps_dem.dart`
+  is the synthetic DEM of the terrain tests, and `alps_fixture.dart` serves
+  it and finds its ground on screen.
 - `.github/workflows/docs.yml`: builds the website (`website/`, `mkdocs.yml`)
   on every pull request; on main it also builds the example app for web as
   the demo and deploys both to GitHub Pages. Links from the website to the
@@ -78,6 +80,7 @@ cd examples && flutter drive --driver test_driver/integration_test.dart --target
 cd tool/codegen && dart run ffigen.dart       # after changing the desktop or Darwin C API header
 cd tool/codegen && dart run jnigen.dart       # after changing MaplibreNativeApi.kt; build examples for Android in release first
 cd tool/codegen && dart run style_layers.dart # after raising the style spec version in the script
+cd examples && dart run tool/alps_dem.dart     # after changing the heights in integration_test/shared/alps_dem.dart
 packages/maplibre_native/linux/test/run_gl_texture_test.sh  # Linux zero-copy check, no Flutter build needed
 ```
 

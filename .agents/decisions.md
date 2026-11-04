@@ -665,6 +665,23 @@ Each entry: the decision, then why.
   context that shares nothing with GDK's, as Flutter's, also across a resize
   and the disposal of a texture. It checks which slots are in use. It passes on Mesa's lavapipe and
   llvmpipe, which share memory, so it runs without a GPU.
+- **Terrain camera tests run over a synthetic DEM with a formula**
+  (`integration_test/shared/alps_dem.dart`): an east-west ridge of 2300 m
+  through the "Alps" camera (47.265° N, 11.404° E) over a 575 m valley
+  floor. `tool/alps_dem.dart` draws its nine zoom-10 Terrarium tiles
+  (43 KB, whole meters, as MapLibre reads them) into
+  `assets/terrain/alps/`; a loopback server serves them on native, and the
+  app's assets on web. Tests can assert drawn heights against
+  `alpsHeight` × exaggeration.
+- **Native terrain tests cast their own rays to find the ground on
+  screen** (`GroundView`, `shared/alps_fixture.dart`), because native
+  projections are at sea level (see Known gaps). It rebuilds the eye from
+  the sea-level projection (the line of sight through the screen's center,
+  whose length the scale across the center gives with MapLibre's 1.5-heights
+  focal length) and intersects rays with `alpsHeight`. Each drag test checks
+  it against the engine's own terrain cast: a feature query at the grabbed
+  point finds a polygon laid on the ground there. On web it uses gl-js's
+  projection, which follows the terrain.
 - **Projection integration tests run at zoom 4.** At the minimum zoom of a
   wide desktop window the world is narrower than the window, and screen
   corners wrap to the neighbouring world copy.
@@ -731,6 +748,12 @@ Each entry: the decision, then why.
 - On web, a style error event that `setStyle` didn't cause, such as one
   from a call on the old style during a load, also fails a terrain that
   waits for that load.
+- Native `toScreenLocation`/`toLngLat` project at sea level, also over a
+  terrain: `MapProjectionHandle` has no heights, and the C API has no
+  projection onto the terrain (the render session casts onto it only for
+  feature queries). gl-js projects onto the terrain. So on native a widget
+  placed with `toScreenLocation` over high ground sits off the ground it
+  marks, and `MapEventClick.point` is the sea-level point.
 - The C API has no setter for the offline tile count limit and no automatic
   database packing, so `setOfflineTileCountLimit` and
   `runPackDatabaseAutomatically` were removed from the `OfflineManager`.
