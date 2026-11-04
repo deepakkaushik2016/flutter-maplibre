@@ -17,6 +17,8 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
     and URL transform of every map and the offline manager.
   - `lib/src/style/terrain.dart`: the 3D `Terrain` of a style and the
     `TerrainLoadMode` of a map.
+  - `lib/src/style/deferred_terrain.dart`: holds a terrain set while a style
+    loads, for both platforms.
 - `packages/maplibre_web`: browser, via maplibre-gl-js.
 - `packages/maplibre_geolocator`: optional adapter from `geolocator` positions
   to the `UserLocationLayer` of `maplibre`.

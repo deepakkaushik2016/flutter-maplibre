@@ -265,6 +265,14 @@ abstract class StyleController {
 
   /// Sets the 3D [terrain] of the style, or removes it when [terrain] is
   /// null.
+  ///
+  /// Loading a new style replaces the terrain with the one of that style. A
+  /// terrain set while a new style loads is applied once it has loaded, and
+  /// the future completes then.
+  ///
+  /// On web, the future fails if the style has no source with the ID
+  /// [Terrain.sourceId]. MapLibre Native takes such a terrain and renders it
+  /// once the source is added.
   Future<void> setTerrain(Terrain? terrain);
 
   /// The 3D terrain of the style, or null if it has none.
