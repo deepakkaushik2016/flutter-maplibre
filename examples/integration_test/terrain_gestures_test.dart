@@ -18,6 +18,11 @@ void main() {
 /// How far in logical pixels the grabbed ground may end up from the finger.
 const _tolerance = 8.0;
 
+/// How far in logical pixels the engine's own cast onto the terrain may be
+/// from [GroundView], well below [_tolerance], so the oracle's error cannot
+/// hide drift.
+const _oracleTolerance = 2.5;
+
 const _terrain = Terrain(sourceId: 'alps', exaggeration: alpsExaggeration);
 
 void runTests() {
@@ -82,17 +87,34 @@ void runTests() {
       );
     }
 
-    /// The ground [_tolerance] pixels around [point], as a polygon.
+    /// The ground [_oracleTolerance] pixels around [point], as a polygon.
     List<Geographic> groundAround(GroundView ground, Offset point) => [
       for (final offset in const [
-        Offset(_tolerance, 0),
-        Offset(0, _tolerance),
-        Offset(-_tolerance, 0),
-        Offset(0, -_tolerance),
-        Offset(_tolerance, 0),
+        Offset(_oracleTolerance, 0),
+        Offset(0, _oracleTolerance),
+        Offset(-_oracleTolerance, 0),
+        Offset(0, -_oracleTolerance),
+        Offset(_oracleTolerance, 0),
       ])
         ground.groundAt(point + offset),
     ];
+
+    testWidgets('GroundView finds the ground that the map draws', (
+      tester,
+    ) async {
+      final (map, ground) = await pumpTerrainMap(tester);
+      // Over the screen: the center, both sides, near and far.
+      for (final offset in const [
+        Offset.zero,
+        Offset(-120, 0),
+        Offset(120, 60),
+        Offset(0, 200),
+        Offset(0, -150),
+      ]) {
+        final point = map.center + offset;
+        await showOnGround(map, groundAround(ground, point), point);
+      }
+    });
 
     testWidgets('the camera center is on the ground by default', (
       tester,
@@ -136,6 +158,10 @@ void runTests() {
         // The engine's own cast onto the terrain finds the ground there too.
         await showOnGround(map, groundAround(ground, from), from);
 
+        // MapLibre Native's pan over a terrain drifts about 0.5 px per move
+        // whatever its length (.agents/decisions.md, Known gaps), so a
+        // finger's 40 moves would end about 20 px off. Raise this to 40
+        // moves of 5 px once engine Task 15 fixes that.
         const step = Offset(-20, 0);
         for (var i = 0; i < 10; i++) {
           await gesture.moveBy(step);
@@ -154,12 +180,9 @@ void runTests() {
         );
         expect(held, lessThanOrEqualTo(_tolerance));
         expect(released, lessThanOrEqualTo(_tolerance));
-        await showOnGround(
-          map,
-          groundAround(ground, ground.toScreen(grabbed)),
-          to,
-          timeout: const Duration(seconds: 3),
-        );
+        // Where GroundView puts the grabbed ground, the engine finds it.
+        final shown = ground.toScreen(grabbed);
+        await showOnGround(map, groundAround(ground, shown), shown);
       },
       // maplibre-gl-js moves the camera over terrain itself; this package
       // anchors gestures only on native (see .agents/decisions.md).

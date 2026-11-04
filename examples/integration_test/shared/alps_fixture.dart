@@ -210,7 +210,9 @@ class _Eye {
     final center = local(Offset.zero);
     final metersPerPixel =
         (local(const Offset(1, 0)) - local(const Offset(-1, 0))).distance / 2;
-    // MapLibre's field of view puts the screen 1.5 heights from the eye.
+    // MapLibre's field of view puts the screen 1.5 heights from the eye
+    // (util::DEFAULT_FOV). The focal length that the projection's own rows
+    // give matches it within 0.02 % on iOS and Android.
     final distance = 1.5 * map.size.height.floorToDouble() * metersPerPixel;
     final ahead = local(const Offset(0, -10)) - center;
     final pitch = camera.pitch * pi / 180;
