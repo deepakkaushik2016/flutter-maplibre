@@ -139,6 +139,10 @@ extension type JsMap._(Camera _) implements Camera {
   /// Get a Source by its id.
   external SourceSpecification? getSource(String id);
 
+  /// The style object of the map. A style swap that gl-js applies as a diff
+  /// keeps it.
+  external JSObject? get style;
+
   /// Sets the value of a paint property of the layer [layerId].
   ///
   /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#setpaintproperty

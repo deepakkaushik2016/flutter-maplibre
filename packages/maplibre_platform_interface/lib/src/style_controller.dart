@@ -270,9 +270,12 @@ abstract class StyleController {
   /// terrain set while a new style loads is applied once it has loaded, and
   /// the future completes then.
   ///
-  /// The future fails with a [StateError] if the style has no source with
-  /// the ID [Terrain.sourceId] when the terrain is applied. A terrain set
-  /// while a style loads is checked against that style.
+  /// The future fails with a [StateError] if, when the terrain is applied,
+  /// the style has no source with the ID [Terrain.sourceId] or that source
+  /// is not a raster DEM source. A terrain set while a style loads is
+  /// checked against that style, and fails if it fails to load or the map is
+  /// disposed first. Only the last terrain set during a load is applied; the
+  /// futures of the earlier calls complete with its result.
   Future<void> setTerrain(Terrain? terrain);
 
   /// The 3D terrain of the style, or null if it has none.
@@ -280,6 +283,10 @@ abstract class StyleController {
 
   /// Sets the global state property [key] of the style to [value], which
   /// `global-state` expressions of the style read.
+  ///
+  /// [value] is a JSON value: a number, string, bool, or a list or map of
+  /// them. null resets the property to the `default` of the style's `state`,
+  /// or to null if the style declares none.
   Future<void> setGlobalState(String key, Object? value);
 
   /// Clean up resources.

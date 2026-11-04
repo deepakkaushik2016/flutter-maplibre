@@ -220,6 +220,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
     _disposed = true;
     _animation?.end(CameraAnimationResult.cancelled);
     _animation = null;
+    _deferredTerrain.dispose();
     style?.dispose();
     _loadingStyle?.dispose();
     _invalidateProjection();
@@ -260,7 +261,9 @@ class MapLibreMapStateNative extends MapLibreMapState {
           _onCameraIdle();
         }
       case mln.RuntimeEventType.mapStyleLoaded:
-        unawaited(_onStyleLoaded());
+        // The latest requested style when the load ended; a style requested
+        // later replaces this one.
+        unawaited(_onStyleLoaded(_deferredTerrain.generation));
       case mln.RuntimeEventType.mapIdle:
         widget.onIdle?.call(const MapEventIdle());
       case mln.RuntimeEventType.mapSourceChanged:
@@ -274,6 +277,11 @@ class MapLibreMapStateNative extends MapLibreMapState {
           onSourceChanged(MapEventSourceChanged(sourceId: value.sourceId));
         }
       case mln.RuntimeEventType.mapLoadingFailed:
+        // Reported only for the style document, not for its resources.
+        _deferredTerrain.styleLoadFailed(
+          _deferredTerrain.generation,
+          StateError('The style failed to load: ${event.message}'),
+        );
         _onError(MapErrorKind.style, event.message);
       case mln.RuntimeEventType.mapRenderError:
         _onError(MapErrorKind.render, event.message);
@@ -475,7 +483,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
   /// [style].
   StyleControllerNative? _loadingStyle;
 
-  Future<void> _onStyleLoaded() async {
+  Future<void> _onStyleLoaded(int generation) async {
     final map = _map;
     if (map == null) return;
     if (_constraintsAfterStyle) {
@@ -504,7 +512,10 @@ class MapLibreMapStateNative extends MapLibreMapState {
     if (!stale()) {
       // Before the style is handed out, so its terrain is the one set while
       // it loaded.
-      await _deferredTerrain.styleLoaded(styleController.applyTerrain);
+      await _deferredTerrain.styleLoaded(
+        generation,
+        styleController.applyTerrain,
+      );
     }
     if (stale()) {
       styleController.dispose();
@@ -799,19 +810,25 @@ class MapLibreMapStateNative extends MapLibreMapState {
     final request = ++_styleRequest;
     bool stale() => _map != map || request != _styleRequest;
     layerManager = null;
-    _deferredTerrain.styleLoading();
+    final generation = _deferredTerrain.styleLoading();
     final Future<mln.CommandCompletion> load;
-    switch (style) {
-      case MapStyleJson(:final json):
-        load = map.setStyleJson(jsonDecode(json));
-      case MapStyleUrl(:final url):
-        load = map.setStyleUrl(url);
-      case MapStyleFile(:final path):
-        load = map.setStyleUrl(Uri.file(path).toString());
-      case MapStyleAsset(:final asset):
-        final json = await DefaultAssetBundle.of(context).loadString(asset);
-        if (stale()) return;
-        load = map.setStyleJson(jsonDecode(json));
+    try {
+      switch (style) {
+        case MapStyleJson(:final json):
+          load = map.setStyleJson(jsonDecode(json));
+        case MapStyleUrl(:final url):
+          load = map.setStyleUrl(url);
+        case MapStyleFile(:final path):
+          load = map.setStyleUrl(Uri.file(path).toString());
+        case MapStyleAsset(:final asset):
+          final json = await DefaultAssetBundle.of(context).loadString(asset);
+          if (stale()) return;
+          load = map.setStyleJson(jsonDecode(json));
+      }
+    } on Object catch (error) {
+      // No style loads, so no terrain waits for one.
+      _deferredTerrain.styleLoadFailed(generation, error);
+      rethrow;
     }
     // A style that fails to load is reported by the map's loading failed
     // event, and a newer style cancels this one.

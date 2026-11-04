@@ -438,7 +438,16 @@ Each entry: the decision, then why.
   the terrain with the style's own on both platforms (MapLibre Native parses
   it over the old one, gl-js diffs it away), so a terrain set during a style
   swap would otherwise be lost. A new style starts with the terrain of its
-  document.
+  document. Each requested style gets a generation, and a load ends the wait
+  only if no newer style was requested since, as a replaced style may still
+  report its load (native: between the event and the flush). Every waiting
+  call completes with the result of the last terrain's apply. A failed load
+  (native `mapLoadingFailed`, which reports only the style document, or a
+  rejected `setStyle*` command; web: an error event of no source or tile
+  while a style loads) and disposing the map fail the waiting calls, so none
+  hangs. On web, a JSON style that gl-js diffs without changes or rejects on
+  validation keeps the loaded style and fires no `style.load`; `_setStyle`
+  sees the unchanged `map.style` and ends the wait at once.
 - **Native keeps the terrain of the style in the controller.** The C getter
   is asynchronous and `StyleController.terrain` is not, so the controller
   takes it from the loaded style JSON it already reads on load and from each

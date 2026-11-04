@@ -43,6 +43,9 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// Holds a terrain set while [_setStyle] loads a style.
   final _deferredTerrain = DeferredTerrain();
 
+  /// The `style.load` listener of the latest [_setStyle].
+  JSExportedDartFunction? _styleLoadListener;
+
   /// The attributions that the widgets in [MapLibreMap.children] last saw.
   List<String> _attributions = const [];
 
@@ -140,7 +143,27 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
       _map.on(
         interop.MapEventType.load,
         (interop.MapMouseEvent event) {
-          _onStyleLoaded();
+          _onStyleLoaded(0);
+        }.toJS,
+      );
+      _map.on(
+        interop.MapEventType.error,
+        (JSObject event) {
+          // gl-js reports a style that failed to load or validate with an
+          // error of no source or tile, and then no `style.load`.
+          if (!_deferredTerrain.loading ||
+              event.has('sourceId') ||
+              event.has('tile')) {
+            return;
+          }
+          final message = event
+              .getProperty<JSObject?>('error'.toJS)
+              ?.getProperty<JSString?>('message'.toJS)
+              ?.toDart;
+          _deferredTerrain.styleLoadFailed(
+            _deferredTerrain.generation,
+            StateError('The style failed to load: $message'),
+          );
         }.toJS,
       );
       _map.on(
@@ -380,6 +403,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     _endAnimation(CameraAnimationResult.cancelled);
     document.removeEventListener('contextmenu', _onContextMenu);
     _contextMenuTimer?.cancel();
+    _deferredTerrain.dispose();
     style?.dispose();
     if (_mapCreated) {
       _map.remove();
@@ -754,15 +778,32 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     // Only the next LayerManager sees MapLibreMap.layers: the layers of the
     // old one go with the old style.
     layerManager = null;
-    _deferredTerrain.styleLoading();
-    _map.once(
-      interop.MapEventType.styleLoad,
-      (JSAny _) {
-        _onStyleLoaded();
-      }.toJS,
-    );
+    final generation = _deferredTerrain.styleLoading();
+    // A style replaced before it loaded fires no `style.load` of its own.
+    if (_styleLoadListener case final listener?) {
+      _map.off(interop.MapEventType.styleLoad, listener);
+    }
+    final listener = _styleLoadListener = (JSAny _) {
+      _styleLoadListener = null;
+      _onStyleLoaded(generation);
+    }.toJS;
+    _map.once(interop.MapEventType.styleLoad, listener);
+    final before = _map.style;
     _map.setStyle(_jsStyle(style));
     _onLoadingStarted();
+    // gl-js diffs a JSON style at once. A diff without changes, or a style
+    // that fails to validate, keeps the loaded style and fires no
+    // `style.load`, so the terrain set meanwhile goes to that style.
+    if (style is MapStyleJson &&
+        _deferredTerrain.loading &&
+        identical(_styleLoadListener, listener) &&
+        _map.style.strictEquals(before).toDart) {
+      _map.off(interop.MapEventType.styleLoad, listener);
+      _styleLoadListener = null;
+      unawaited(
+        _deferredTerrain.styleLoaded(generation, this.style!.applyTerrain),
+      );
+    }
   }
 
   /// Whether a style loads, until the next idle event, see
@@ -802,14 +843,14 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     }
   }
 
-  void _onStyleLoaded() {
+  void _onStyleLoaded(int generation) {
     layerManager = null;
     style?.dispose();
     final styleCtrl = StyleControllerWeb(_map, _deferredTerrain)..load();
     style = styleCtrl;
-    // Applied at once: the style has loaded, and a failure goes to the
-    // future of setTerrain.
-    unawaited(_deferredTerrain.styleLoaded(styleCtrl.applyTerrain));
+    // Applied at once, as the style has loaded, so the futures of setTerrain
+    // complete before the events below; a failure goes to them.
+    unawaited(_deferredTerrain.styleLoaded(generation, styleCtrl.applyTerrain));
     widget.onStyleLoaded?.call(styleCtrl);
     layerManager = LayerManager(styleCtrl, widget.layers);
     _attributions = styleCtrl.attributions;
