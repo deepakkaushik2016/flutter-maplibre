@@ -1,3 +1,24 @@
+## Unreleased
+
+Platform implementations and fakes of the controllers need the new members
+below. See also the
+[maplibre changelog](https://github.com/josxha/flutter-maplibre/blob/main/packages/maplibre/CHANGELOG.md).
+
+### Breaking Changes
+
+- `MapController` has four new members: `toLngLatOnTerrain`,
+  `toScreenLocationOnTerrain`, `setTerrainLoadMode` and
+  `queryTerrainElevation`. A class that implements `MapController`, such as
+  a hand-written fake in an app's tests, must implement them.
+- `StyleController` has three new abstract members: `setTerrain`,
+  `terrain` and `setGlobalState`. A class that extends or implements it
+  must implement them.
+- `MapGestureDetector` now also sets `GestureCameraUpdate.around` on steps
+  that only pan, to the point the finger moved to, so a platform can keep
+  the ground under the finger. A `GestureCameraSink` that took a non-null
+  `around` to mean that the step zooms or rotates must check `zoomBy` and
+  `rotateBy` instead.
+
 ## 0.4.0-pre.2
 
 [Check the maplibre changelog](https://pub.dev/packages/maplibre/versions/0.4.0-pre.2/changelog#040-pre2)
