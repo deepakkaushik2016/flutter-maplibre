@@ -123,6 +123,20 @@ final class MapRenderer implements FrameTargetHost {
   Future<TerrainElevation?> queryTerrainElevation(LatLng point) =>
       _session.queryTerrainElevation(point);
 
+  /// Finds the ground that the session's latest frame draws at [point], or
+  /// the sea-level coordinate there without a terrain. The C API answers
+  /// asynchronously, with no value where the line of sight meets no ground
+  /// of a loaded DEM tile.
+  Future<TerrainLatLng?> queryLatLngForPixel(ScreenPoint point) =>
+      _session.queryLatLngForPixel(point);
+
+  /// Finds where the session's latest frame draws [coordinate] on the
+  /// ground, and whether nearer ground hides it. The C API answers
+  /// asynchronously, with no value behind the camera or where no loaded DEM
+  /// tile covers [coordinate].
+  Future<TerrainScreenPoint?> queryPixelForLatLng(LatLng coordinate) =>
+      _session.queryPixelForLatLng(coordinate);
+
   @override
   bool get disposed => _disposed;
 

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 
 /// The 3D terrain of a style, which raises the map by the elevations of a
@@ -56,4 +57,33 @@ enum TerrainLoadMode {
   /// Builds the fewest new terrain tiles a frame, and keeps the fewest: the
   /// smoothest on a weak GPU, and the shortest view distance.
   performance,
+}
+
+/// Where the map draws a point of the ground, as
+/// [MapController.toScreenLocationOnTerrain] finds it.
+@immutable
+class TerrainScreenLocation {
+  /// Creates a screen location of a point of the ground.
+  const TerrainScreenLocation({required this.offset, required this.occluded});
+
+  /// The screen location in logical pixels.
+  final Offset offset;
+
+  /// Whether ground nearer the camera hides the point, such as a ridge in
+  /// front of it.
+  final bool occluded;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TerrainScreenLocation &&
+          offset == other.offset &&
+          occluded == other.occluded;
+
+  @override
+  int get hashCode => Object.hash(offset, occluded);
+
+  @override
+  String toString() =>
+      'TerrainScreenLocation(offset: $offset, occluded: $occluded)';
 }

@@ -17,6 +17,10 @@
 - 3D terrain: `MapController.queryTerrainElevation` reads the height of the
   terrain at a point as the map draws it, with the exaggeration, on web and
   native, or null where no terrain or DEM tile is loaded.
+- 3D terrain: `MapController.toLngLatOnTerrain` and
+  `MapController.toScreenLocationOnTerrain` convert between screen points
+  and the ground that the terrain draws, and tell whether nearer ground
+  hides a point, on web and native.
 
 ## 0.4.0-pre.2
 

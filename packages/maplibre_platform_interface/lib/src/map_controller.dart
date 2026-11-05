@@ -41,6 +41,45 @@ abstract interface class MapController {
   /// pixels.
   List<Geographic> toLngLats(List<Offset> screenLocations);
 
+  /// Finds the ground that the map draws at [screenLocation], in logical
+  /// pixels, following the line of sight to the first ground of the terrain.
+  ///
+  /// [toLngLat] answers at once, but on native it projects onto sea level,
+  /// also over a terrain, so over high ground it finds a point behind the
+  /// one drawn there. Use this where the ground matters, such as for the
+  /// point an app's tap hit over mountains.
+  ///
+  /// Without a terrain in the style, this is the point that [toLngLat]
+  /// finds. Returns null where the line of sight meets no ground of a loaded
+  /// DEM tile: above the horizon, beyond the terrain's tiles, and while they
+  /// load. Also null before the map has drawn its first frame.
+  ///
+  /// Each call is one query of the map's latest frame on native, or a few
+  /// calls into maplibre-gl-js on web.
+  Future<Geographic?> toLngLatOnTerrain(Offset screenLocation);
+
+  /// Finds where the map draws [lngLat] on the ground, at the height the
+  /// terrain draws there, and whether nearer ground hides it.
+  ///
+  /// [toScreenLocation] answers at once, but on native it projects from sea
+  /// level, also over a terrain. Use this to place a widget on the ground it
+  /// marks, or to hide it behind a ridge.
+  ///
+  /// Without a terrain in the style, the offset is the one that
+  /// [toScreenLocation] finds, and [TerrainScreenLocation.occluded] is false.
+  /// Returns null where no DEM tile that the map has loaded covers [lngLat],
+  /// for a point behind the camera on native, and before the map has drawn
+  /// its first frame.
+  ///
+  /// On web, maplibre-gl-js has no public occlusion test, so a point counts
+  /// as hidden when the ground drawn at its screen location is higher than
+  /// the point: a line of sight that comes down onto the ground meets the
+  /// higher ground first.
+  ///
+  /// Each call is one query of the map's latest frame on native, or a few
+  /// calls into maplibre-gl-js on web.
+  Future<TerrainScreenLocation?> toScreenLocationOnTerrain(Geographic lngLat);
+
   /// Moves the camera to [update] without an animation.
   ///
   /// It stops a running [animateCamera].

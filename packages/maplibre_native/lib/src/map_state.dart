@@ -870,11 +870,43 @@ class MapLibreMapStateNative extends MapLibreMapState {
 
   @override
   Future<double?> queryTerrainElevation(Geographic point) async {
+    final elevation = await _queryFrame(
+      (renderer) => renderer.queryTerrainElevation(point.toMln()),
+    );
+    return elevation?.meters;
+  }
+
+  @override
+  Future<Geographic?> toLngLatOnTerrain(Offset screenLocation) async {
+    final ground = await _queryFrame(
+      (renderer) => renderer.queryLatLngForPixel(screenLocation.toMln()),
+    );
+    return ground?.coordinate.toGeographic();
+  }
+
+  @override
+  Future<TerrainScreenLocation?> toScreenLocationOnTerrain(
+    Geographic lngLat,
+  ) async {
+    final drawn = await _queryFrame(
+      (renderer) => renderer.queryPixelForLatLng(lngLat.toMln()),
+    );
+    if (drawn == null) return null;
+    return TerrainScreenLocation(
+      offset: drawn.point.toOffset(),
+      occluded: drawn.occluded,
+    );
+  }
+
+  /// Runs [query] on the session's latest frame, or answers null without a
+  /// frame to read.
+  Future<T?> _queryFrame<T extends Object>(
+    Future<T?> Function(MapRenderer renderer) query,
+  ) async {
     final renderer = _renderer;
     if (renderer == null || _disposed) return null;
     try {
-      final elevation = await renderer.queryTerrainElevation(_latLng(point));
-      return elevation?.meters;
+      return await query(renderer);
     } on mln.MaplibreException catch (error) {
       // The session has no frame to read yet: before its first frame, or
       // after its scale factor changed. No terrain is drawn then.

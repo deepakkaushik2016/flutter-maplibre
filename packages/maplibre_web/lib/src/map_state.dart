@@ -722,6 +722,45 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   Future<void> setTerrainLoadMode(TerrainLoadMode mode) async {}
 
   @override
+  Future<Geographic?> toLngLatOnTerrain(Offset screenLocation) async {
+    // maplibre-gl-js unprojects onto the terrain, and onto sea level where
+    // the line of sight misses it.
+    final point = _map.unproject(screenLocation.toJs());
+    final ground = point.toGeographic();
+    if (_map.terrain == null) return ground;
+    // Lifted to the terrain, a sea-level point leaves the screen location.
+    final drawn = _map.project(point).toOffset();
+    if ((drawn - screenLocation).distance > _terrainPixelTolerance) {
+      return null;
+    }
+    return await queryTerrainElevation(ground) == null ? null : ground;
+  }
+
+  @override
+  Future<TerrainScreenLocation?> toScreenLocationOnTerrain(
+    Geographic lngLat,
+  ) async {
+    final point = lngLat.toJs();
+    // maplibre-gl-js projects from the height that the terrain draws.
+    final offset = _map.project(point).toOffset();
+    if (!offset.isFinite) return null;
+    if (_map.terrain == null) {
+      return TerrainScreenLocation(offset: offset, occluded: false);
+    }
+    final height = await queryTerrainElevation(lngLat);
+    if (height == null) return null;
+    // A line of sight that comes down onto the ground meets the nearer of
+    // two points on it higher up, so ground drawn there higher than the
+    // point hides it.
+    final shown = _map.unproject(offset.toJs()).toGeographic();
+    final shownHeight = await queryTerrainElevation(shown);
+    return TerrainScreenLocation(
+      offset: offset,
+      occluded: shownHeight != null && shownHeight - height > _occludingMeters,
+    );
+  }
+
+  @override
   Future<double?> queryTerrainElevation(Geographic point) async {
     final lngLat = point.toJs();
     final elevation = _map.queryTerrainElevation(lngLat)?.toDouble();
@@ -1141,3 +1180,13 @@ extension type _CameraAnimationEventData._(JSObject _) implements JSObject {
 
   external int? get flutterMapLibreAnimation;
 }
+
+/// How far in logical pixels the terrain may draw a point unprojected onto
+/// it from the screen location it came from, more than maplibre-gl-js's
+/// rounding and less than any height lifts a sea-level point by.
+const _terrainPixelTolerance = 1.0;
+
+/// How many meters higher the ground drawn at a point's screen location
+/// has to be to hide the point, more than maplibre-gl-js's unprojection is
+/// off by on a slope.
+const _occludingMeters = 2.0;

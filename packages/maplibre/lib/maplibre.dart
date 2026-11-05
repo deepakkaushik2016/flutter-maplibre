@@ -192,6 +192,7 @@ export 'package:maplibre_platform_interface/maplibre_platform_interface.dart'
         SymbolZOrder,
         Terrain,
         TerrainLoadMode,
+        TerrainScreenLocation,
         TextAnchor,
         TextJustify,
         TextOverlap,

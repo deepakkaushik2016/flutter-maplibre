@@ -610,6 +610,27 @@ Each entry: the decision, then why.
   platforms answer for a point off screen while its DEM tile stays loaded,
   and null beyond the source's tiles. No batch call: the app's elevation
   profiles come from its server.
+- **Terrain-aware screen conversions are their own asynchronous calls:
+  `toLngLatOnTerrain` and `toScreenLocationOnTerrain`.** The synchronous
+  `toLngLat`/`toScreenLocation` (used by widget layers, the scale bar,
+  `MapEventClick.point`) can't follow the terrain on native: the projection
+  of the shown frame has no heights, and the C API's terrain conversions
+  (`mln_render_session_query_lat_lng_for_pixel`, `…_pixel_for_lat_lng`)
+  run on the render session and complete later, which the UI isolate must
+  not wait for. So the synchronous ones keep their meaning (sea level on
+  native, gl-js's terrain projection on web) and the new ones answer from
+  the ground, with `TerrainScreenLocation.occluded`. Native: one query of
+  the session's latest frame each, nothing per frame, and null where the C
+  API has no value or no frame yet. Web: gl-js's public `unproject` and
+  `project` follow the terrain; `toLngLatOnTerrain` projects the point back
+  and answers null when it lands more than 1 px away (gl-js fell back to
+  sea level: the line of sight missed the terrain) or where its DEM tile
+  hasn't loaded, as native does. gl-js's occlusion test
+  (`transform.isLocationOccluded`) is internal, so web calls a point hidden
+  when the ground drawn at its screen location is more than 2 m higher: a
+  line of sight that comes down onto the ground meets the higher of two
+  points on it first. Two to four gl-js calls per conversion. No list
+  variants: the C API answers one point per query.
 - **On web, Flutter is the only hit-tester.** The gl-js map is created with
   `interactive: false` and its container has `pointer-events: none`, so the
   browser hands every pointer to Flutter, and widgets over the map no longer
@@ -802,11 +823,18 @@ Each entry: the decision, then why.
   null but no test reaches it: a query from `onMapCreated` runs after the
   frame the renderer has already demanded.
 - Native `toScreenLocation`/`toLngLat` project at sea level, also over a
-  terrain: `MapProjectionHandle` has no heights, and the C API has no
-  projection onto the terrain (the render session casts onto it only for
-  feature queries). gl-js projects onto the terrain. So on native a widget
-  placed with `toScreenLocation` over high ground sits off the ground it
-  marks, and `MapEventClick.point` is the sea-level point.
+  terrain: `MapProjectionHandle` has no heights, and the C API's terrain
+  conversions are asynchronous queries of the render session. gl-js
+  projects onto the terrain. So on native a widget placed with
+  `toScreenLocation` over high ground sits off the ground it marks, and
+  `MapEventClick.point` is the sea-level point; an app uses
+  `toLngLatOnTerrain`/`toScreenLocationOnTerrain` for those instead. The
+  terrain queries read the session's latest frame, which can be a frame
+  ahead of the one on screen while the camera moves.
+- Web's occlusion test assumes a line of sight that comes down onto the
+  ground. Near the top of a screen pitched past about 70°, a line of sight
+  can rise to ground above the camera, and a point hidden behind a lower
+  rise reads visible there.
 - On web, gl-js's terrain camera moves the grabbed ground during gestures:
   22 px for a 200 px drag over the synthetic ridge and 53 px for a double
   tap. That is gl-js's own behaviour; the web sink is unchanged, and the
