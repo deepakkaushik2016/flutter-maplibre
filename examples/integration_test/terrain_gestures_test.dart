@@ -308,6 +308,45 @@ void runTests() {
       expectCenterOnGround(map, ground);
     }, skip: kIsWeb);
 
+    testWidgets('a two-finger tilt keeps the ground at the center', (
+      tester,
+    ) async {
+      final (map, ground) = await pumpTerrainMap(tester);
+      final before = map.controller.getCamera();
+      final grabbed = ground.groundAt(map.center);
+      // Two fingers side by side, below the center, moving down together.
+      final a = await tester.startGesture(
+        map.toGlobal(map.center + const Offset(-60, 120)),
+      );
+      final b = await tester.startGesture(
+        map.toGlobal(map.center + const Offset(60, 120)),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      const step = Offset(0, 5);
+      for (var i = 0; i < 12; i++) {
+        await a.moveBy(step);
+        await tester.pump(const Duration(milliseconds: 16));
+        await b.moveBy(step);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await a.up();
+      await b.up();
+      await fixture.waitUntilSettled(map, ground);
+      final after = map.controller.getCamera();
+      final held = await drift(map, ground, grabbed, map.center);
+      debugPrint(
+        'tilt: pitch ${before.pitch.toStringAsFixed(2)} -> '
+        '${after.pitch.toStringAsFixed(2)}, the center ground '
+        '${held.toStringAsFixed(2)} px off',
+      );
+      // 0.25 degrees per pixel, each finger counting half: 21 of the 24
+      // moves of 5 px tilt, once both fingers passed the 10 px slop.
+      expect(after.pitch, closeTo(before.pitch - 21 * 5 / 2 * 0.25, 0.5));
+      expect(after.bearing, closeTo(before.bearing, 0.01));
+      expect(held, lessThanOrEqualTo(_tolerance));
+      expectCenterOnGround(map, ground);
+    });
+
     /// Taps twice at [point], 50 ms apart.
     Future<void> doubleTap(
       WidgetTester tester,
