@@ -210,6 +210,47 @@ void main() {
       expect(camera.endVelocity, GestureVelocity.zero);
     });
 
+    testWidgets('a drag holds the ground under the finger', (tester) async {
+      await pumpMap(tester);
+      final finger = await tester.startGesture(_center);
+      for (var i = 0; i < 40; i++) {
+        await finger.moveBy(const Offset(-5, 2));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await finger.up();
+      await tester.pumpAndSettle();
+      final pans = camera.updates.where((u) => u.pans).toList();
+      expect(pans, hasLength(greaterThan(30)));
+      // Each step names the finger as the point it holds, and starts where
+      // the last one left the finger, so a platform can keep the ground it
+      // grabbed under the finger.
+      for (final (i, update) in pans.indexed) {
+        expect(update.around, update.panTo, reason: 'step $i');
+        if (i > 0) expect(update.panFrom, pans[i - 1].panTo, reason: 'step $i');
+      }
+    });
+
+    testWidgets('a moving pinch holds the ground under its focal point', (
+      tester,
+    ) async {
+      await pumpMap(tester);
+      final a = await tester.startGesture(_center - const Offset(50, 0));
+      final b = await tester.startGesture(_center + const Offset(50, 0));
+      for (var i = 0; i < 10; i++) {
+        await a.moveBy(const Offset(-6, 3));
+        await b.moveBy(const Offset(6, 3));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await a.up();
+      await b.up();
+      await tester.pumpAndSettle();
+      final steps = camera.updates.where((u) => u.pans && u.zoomBy != 0);
+      expect(steps, isNotEmpty);
+      // Pan, zoom and rotation hold the ground that ends up at the focal
+      // point, in one step.
+      expect(steps.every((u) => u.around == u.panTo), isTrue);
+    });
+
     testWidgets('scroll wheel zooms the map', (tester) async {
       await pumpMap(tester);
       final pointer = TestPointer(1, PointerDeviceKind.mouse);

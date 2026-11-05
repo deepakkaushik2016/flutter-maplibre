@@ -61,8 +61,15 @@ class GestureCameraUpdate {
   /// Degrees to add to the pitch. Positive tilts further from straight down.
   final double pitchBy;
 
-  /// The screen point that zoom, rotation and pitch keep in place, or null
-  /// for the platform's default.
+  /// The screen point that the step holds the map content at, or null for
+  /// the platform's default.
+  ///
+  /// Zoom, rotation and pitch keep the content there in place. A step that
+  /// also pans holds the content that ends up there, at [panTo]: the ground
+  /// under a dragging finger or a pinch's focal point. Each step of a drag
+  /// or pinch starts where the last one left the finger, so a platform can
+  /// keep the ground the gesture grabbed under it, as MapLibre Native does
+  /// over a terrain.
   final Offset? around;
 
   /// Whether [panFrom] and [panTo] move the map.

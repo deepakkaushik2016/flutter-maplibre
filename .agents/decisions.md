@@ -549,7 +549,9 @@ Each entry: the decision, then why.
 - **The recognizer hands the platforms screen-space intents through
   `GestureCameraSink`, never map centers.** A step (`GestureCameraUpdate`)
   pans the content under one screen point to another, then zooms, rotates
-  and tilts around a screen point. Each platform applies it with its own
+  and tilts around a screen point. For a drag and a pinch, that point
+  (`around`) is the finger or the focal point, where the pan leaves the
+  content, and each step starts where the last one left it. Each platform applies it with its own
   projection-aware camera engine, so a new projection (globe) needs no Dart
   change. `gestureEnd` carries a `GestureVelocity`: the pan's release
   velocity (of the focal point for more than one pointer, as Flutter reports
@@ -565,17 +567,22 @@ Each entry: the decision, then why.
   it for every style, and it applies only while the style has a terrain.
   Without it, a pitched camera over high ground can sit under the ground and
   show nothing.
-- **Native gestures over a terrain move the ground under the fingers.**
-  A pan moves the plane at the center's height, so the center has to be on
-  the ground the gesture grabs: the clamp (above) keeps it there between
-  gestures, and `gestureStart` and `zoomBy` call
-  `anchorCenterOnTerrain` once, only when the style has a terrain, and never
-  per frame; the map holds the center's height during a gesture and
-  anchors it again at the end, keeping the view. Measured over the
-  synthetic ridge (zoom 13, pitch 60, ×1.25): a 200 px drag ends 150–155 px
-  off without the clamp and the anchor, 5 px with them (see Known gaps for
-  the rest). The drag makes 13 calls (anchor, begin, 10 steps, end) instead
-  of 12.
+- **Native gestures over a terrain hold the ground under the fingers.**
+  The native sink sends a step's `around` as the anchor of its one
+  `mln_map_apply_camera_delta`, also with a pan alone. MapLibre Native then
+  grabs the ground drawn under the finger at that ground's own height and
+  keeps it there for the gesture; a pinch scales and turns about where its
+  focal point was, then pans that ground to the anchor, in the same delta.
+  A pan without the anchor would move the plane at the center's height,
+  which ground above or below it slides off. `gestureStart` (and, until it
+  is one delta, `zoomBy`) still calls `anchorCenterOnTerrain` once when the
+  style has a terrain, so the steps before the grab's height arrives move
+  the center's ground. Measured over the synthetic ridge (zoom 13, pitch 60,
+  ×1.25), 40 moves of 5 px: grabs off the center's height ended 15.8 and
+  86.1 px off without the anchor, at most 0.04 px with it (iOS simulator
+  and Android emulator); a moving, twisting pinch 0.08–0.37 px. No call is
+  added: the anchor is two doubles in the step's delta, and a drag of 40
+  moves makes 43 calls (anchor, begin, 40 steps, end).
 - **Native `zoomBy` over a terrain runs as a gesture with the clamp off.**
   MapLibre Native treats an animated or immediate scale delta as a camera
   change of the app: it eases the center's height to the ground of the new
@@ -807,21 +814,15 @@ Each entry: the decision, then why.
   feature queries). gl-js projects onto the terrain. So on native a widget
   placed with `toScreenLocation` over high ground sits off the ground it
   marks, and `MapEventClick.point` is the sea-level point.
-- MapLibre Native's pan over a terrain moves the center about 6 m along the
-  view per `mln_map_apply_camera_delta` call, whatever its offset (zoom 13,
-  pitch 60, center 2875 m high): 0.5 px per pointer move, 5 px for a 200 px
-  drag in 10 moves, 20 px in 40. Likely cause: `Camera::getWorldToCamera`
-  converts meters at the eye's latitude, `TransformState` the center's
-  altitude at the center's latitude, so the plane `moveBy` unprojects onto
-  is slightly off the center. Flat maps don't drift.
 - After a zoom over a slope, MapLibre Native's anchor at a gesture's end
   sometimes leaves the center off the ground it looks at (2 of 12 runs
   7.6 px off on the Android emulator, once not anchored at all). The
   zoomed-in-on ground stays in place; the next gesture anchors again.
 - On web, gl-js's terrain camera moves the grabbed ground during gestures:
-  22 px for the 200 px drag of `terrain_gestures_test.dart` and 53 px for
-  its double tap. The web sink is unchanged, and those two tests run on
-  native only.
+  22 px for a 200 px drag over the synthetic ridge and 53 px for a double
+  tap. That is gl-js's own behaviour; the web sink is unchanged, and the
+  drag, pinch and zoom tests of `terrain_gestures_test.dart` run on native
+  only.
 - The C API has no setter for the offline tile count limit and no automatic
   database packing, so `setOfflineTileCountLimit` and
   `runPackDatabaseAutomatically` were removed from the `OfflineManager`.

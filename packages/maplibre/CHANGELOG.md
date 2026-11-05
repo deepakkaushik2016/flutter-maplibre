@@ -9,8 +9,9 @@
 - 3D terrain: the camera's center follows the ground by default, so a pitched
   camera stays above it; `MapOptions.centerClampedToGround: false` turns that
   off.
-- 3D terrain on native: drags, pinches and double taps move the ground under
-  the fingers instead of a plane at sea level.
+- 3D terrain on native: drags and pinches keep the ground they grab under
+  the fingers, at that ground's own height, and double taps and wheel zooms
+  keep the ground they zoom in on in place.
 - 3D terrain: `MapController.setTerrainLoadMode` trades the detail of the
   terrain for loading speed on native. It does nothing on web.
 - 3D terrain: `MapController.queryTerrainElevation` reads the height of the

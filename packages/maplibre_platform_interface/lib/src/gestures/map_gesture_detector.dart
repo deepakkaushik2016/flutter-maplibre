@@ -758,7 +758,9 @@ class _MapGestureDetectorState extends State<MapGestureDetector> {
         panTo: pans ? focal : null,
         zoomBy: zoomBy,
         rotateBy: rotateBy,
-        around: zooms || rotates ? focal : null,
+        // The fingers hold the ground under them: a drag the ground under
+        // the finger, a pinch the ground under its focal point.
+        around: pans || zooms || rotates ? focal : null,
       ),
     );
   }

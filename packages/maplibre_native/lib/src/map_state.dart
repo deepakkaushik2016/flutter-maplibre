@@ -965,15 +965,21 @@ class _NativeGestureCamera implements GestureCameraSink {
     final scales = update.zoomBy != 0;
     final rotates = update.rotateBy != 0;
     final tilts = update.pitchBy != 0;
+    final pans = update.pans;
     final around = update.around;
+    // One delta per step. With an anchor, the map grabs the ground under it
+    // (over a terrain, at that ground's height) and keeps it there: a pan
+    // moves the ground under the finger (`around` is where the step leaves
+    // it), and a pinch scales and turns about where its focal point was,
+    // then pans that ground to `around`.
     _state._applyDelta(
       mln.CameraDelta(
-        offset: update.pans ? (update.panTo! - update.panFrom!).toMln() : null,
+        offset: pans ? (update.panTo! - update.panFrom!).toMln() : null,
         scale: scales ? pow(2, update.zoomBy).toDouble() : null,
         bearing: rotates ? update.rotateBy : null,
         pitch: tilts ? update.pitchBy : null,
-        // The C API rejects an anchor without a scale, bearing or pitch.
-        anchor: around != null && (scales || rotates || tilts)
+        // The C API rejects an anchor of a delta that changes nothing.
+        anchor: around != null && (pans || scales || rotates || tilts)
             ? around.toMln()
             : null,
         gesturePhase: mln.GesturePhase.update,
