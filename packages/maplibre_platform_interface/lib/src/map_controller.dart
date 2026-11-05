@@ -86,7 +86,13 @@ abstract interface class MapController {
   /// On web, maplibre-gl-js has no public occlusion test, so a point counts
   /// as hidden when the ground drawn at its screen location is higher than
   /// the point: a line of sight that comes down onto the ground meets the
-  /// higher ground first.
+  /// higher ground first. A line of sight that rises to ground above the
+  /// camera, near the top of a view pitched past about 70°, breaks that
+  /// rule, and a point hidden there behind lower ground reads visible.
+  ///
+  /// A point behind the camera is null on native. maplibre-gl-js projects it
+  /// anyway, so on web it gets a screen location mirrored through the
+  /// camera, which no part of the map draws.
   ///
   /// Each call is one query of the map's latest frame on native, or a few
   /// calls into maplibre-gl-js on web.

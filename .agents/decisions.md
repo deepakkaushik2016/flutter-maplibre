@@ -835,6 +835,9 @@ Each entry: the decision, then why.
   ground. Near the top of a screen pitched past about 70°, a line of sight
   can rise to ground above the camera, and a point hidden behind a lower
   rise reads visible there.
+- gl-js projects a point behind the camera anyway, mirrored through it, so
+  web's `toScreenLocationOnTerrain` gives such a point a screen location
+  where native gives null. Both caveats are in the method's dartdoc.
 - On web, gl-js's terrain camera moves the grabbed ground during gestures:
   22 px for a 200 px drag over the synthetic ridge and 53 px for a double
   tap. That is gl-js's own behaviour; the web sink is unchanged, and the
