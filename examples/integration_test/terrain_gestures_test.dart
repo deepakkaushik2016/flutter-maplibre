@@ -502,10 +502,14 @@ void runTests() {
       final sky = Offset(map.center.dx, 1);
       final found = await map.controller.toLngLatOnTerrain(sky);
       final plain = map.controller.toLngLat(sky);
+      final plainHeight = await map.controller.queryTerrainElevation(plain);
       debugPrint(
         'sky at $sky: $found; toLngLat $plain, whose drawn height is '
-        '${await map.controller.queryTerrainElevation(plain)} m',
+        '$plainHeight m',
       );
+      // The premise: a DEM tile holds the sea-level point, so only the
+      // check that it is drawn back at the pixel rejects it.
+      expect(plainHeight, isNotNull, reason: 'no DEM tile holds $plain');
       expect(found, isNull);
       // The ground lower on the screen is found.
       final below = map.center + const Offset(0, 200);
