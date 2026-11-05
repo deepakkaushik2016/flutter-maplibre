@@ -36,22 +36,29 @@ void runTests() {
     tearDown(() async => fixture.close());
 
     /// The options of a map at the Alps camera over the synthetic ridge.
-    MapOptions terrainOptions({bool centerClampedToGround = true}) =>
-        MapOptions(
-          style: MapStyle.json(jsonEncode(fixture.style())),
-          initCamera: alpsCamera,
-          centerClampedToGround: centerClampedToGround,
-        );
+    MapOptions terrainOptions({
+      bool centerClampedToGround = true,
+      double maxPitch = 60,
+    }) => MapOptions(
+      style: MapStyle.json(jsonEncode(fixture.style())),
+      initCamera: alpsCamera,
+      centerClampedToGround: centerClampedToGround,
+      maxPitch: maxPitch,
+    );
 
     /// A map over the synthetic ridge with its terrain, once the camera
     /// settled on it.
     Future<(TestMap, GroundView)> pumpTerrainMap(
       WidgetTester tester, {
       bool centerClampedToGround = true,
+      double maxPitch = 60,
     }) async {
       final map = await pumpMap(
         tester,
-        options: terrainOptions(centerClampedToGround: centerClampedToGround),
+        options: terrainOptions(
+          centerClampedToGround: centerClampedToGround,
+          maxPitch: maxPitch,
+        ),
       );
       await map.style.setTerrain(_terrain);
       final ground = GroundView(map);
@@ -473,6 +480,35 @@ void runTests() {
           reason: '$point',
         );
       }
+    });
+
+    testWidgets('toLngLatOnTerrain finds nothing in the sky', (tester) async {
+      final (map, ground) = await pumpTerrainMap(tester, maxPitch: 85);
+      // At pitch 60 the top of the screen still shows ground some 24 km
+      // north; at 75 the horizon is on screen and the top rows are sky.
+      // From 40 km north of the crest, the sea-level point that
+      // maplibre-gl-js falls back to for the sky, behind the camera, lies on
+      // the DEM tiles loaded around the crest, so only the check that the
+      // point is drawn back at the pixel tells it from ground.
+      await map.controller.moveCamera(
+        const CameraUpdate.position(
+          center: Geographic(lon: alpsLng, lat: alpsLat + 40 / _kmPerDegree),
+          pitch: 75,
+        ),
+      );
+      await map.waitForLatestFrame();
+      await fixture.waitUntilSettled(map, ground);
+      final sky = Offset(map.center.dx, 1);
+      final found = await map.controller.toLngLatOnTerrain(sky);
+      final plain = map.controller.toLngLat(sky);
+      debugPrint(
+        'sky at $sky: $found; toLngLat $plain, whose drawn height is '
+        '${await map.controller.queryTerrainElevation(plain)} m',
+      );
+      expect(found, isNull);
+      // The ground lower on the screen is found.
+      final below = map.center + const Offset(0, 200);
+      expect(await map.controller.toLngLatOnTerrain(below), isNotNull);
     });
 
     testWidgets('the terrain conversions are the plain ones without one', (
