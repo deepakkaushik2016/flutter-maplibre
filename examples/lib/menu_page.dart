@@ -28,6 +28,7 @@ import 'package:maplibre_example/style_layers_symbol_page.dart';
 import 'package:maplibre_example/style_sources_image_page.dart';
 import 'package:maplibre_example/style_sources_vector_page.dart';
 import 'package:maplibre_example/styled_map_page.dart';
+import 'package:maplibre_example/terrain_page.dart';
 import 'package:maplibre_example/translucent_map_page.dart';
 import 'package:maplibre_example/two_maps_page.dart';
 import 'package:maplibre_example/user_location_page.dart';
@@ -60,6 +61,11 @@ class MenuPage extends StatelessWidget {
                           label: 'Map Styles',
                           iconData: Icons.color_lens,
                           location: StyledMapPage.location,
+                        ),
+                        const ItemCard(
+                          label: '3D Terrain',
+                          iconData: Icons.terrain,
+                          location: TerrainPage.location,
                         ),
                         const ItemCard(
                           label: 'Translucent Map',

@@ -29,6 +29,7 @@ import 'package:maplibre_example/style_layers_symbol_page.dart';
 import 'package:maplibre_example/style_sources_image_page.dart';
 import 'package:maplibre_example/style_sources_vector_page.dart';
 import 'package:maplibre_example/styled_map_page.dart';
+import 'package:maplibre_example/terrain_page.dart';
 import 'package:maplibre_example/translucent_map_page.dart';
 import 'package:maplibre_example/two_maps_page.dart';
 import 'package:maplibre_example/user_location_page.dart';
@@ -77,6 +78,7 @@ class MyApp extends StatelessWidget {
             const StyleLayersHeatmapPage(),
         StyleLayersHillshadePage.location: (context) =>
             const StyleLayersHillshadePage(),
+        TerrainPage.location: (context) => const TerrainPage(),
         StyleLayersFillPage.location: (context) => const StyleLayersFillPage(),
         StyleLayersFillExtrusionPage.location: (context) =>
             const StyleLayersFillExtrusionPage(),
