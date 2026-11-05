@@ -4,8 +4,10 @@ import 'package:maplibre_platform_interface/src/style/terrain.dart';
 
 /// Holds a [Terrain] that is set while a map loads a new style, until the
 /// last requested style has loaded. Loading a style replaces its terrain, so
-/// a terrain set meanwhile would be lost. This is an internal class that
-/// doesn't get exposed publicly.
+/// a terrain set meanwhile would be lost.
+///
+/// The platform packages share it, so this package exports it; the
+/// app-facing `maplibre` package doesn't, and apps don't use it.
 ///
 /// Each requested style gets a generation from [styleLoading]. A platform
 /// reports the end of a load with the generation that was the latest when
