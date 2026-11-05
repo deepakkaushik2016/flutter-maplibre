@@ -34,6 +34,28 @@ void runTests() {
       expect(lngLat.lat, closeTo(2, 0.03));
     });
 
+    testWidgets('screen locations follow the frame of a new camera', (
+      tester,
+    ) async {
+      final map = await pumpMap(tester, options: _options());
+      const first = Geographic(lon: 1, lat: 2);
+      const second = Geographic(lon: 3, lat: 4);
+      // A conversion on the first frame, so a projection of it exists.
+      final before = map.controller.toScreenLocation(first);
+      expect(before.dx, closeTo(map.center.dx, 0.5));
+      await map.controller.moveCamera(
+        const CameraUpdate.position(center: second),
+      );
+      await map.waitForLatestFrame();
+      final center = map.controller.toScreenLocation(second);
+      expect(center.dx, closeTo(map.center.dx, 0.5));
+      expect(center.dy, closeTo(map.center.dy, 0.5));
+      // 2 degrees west and south of the center at zoom 4: about 45 pixels.
+      final moved = map.controller.toScreenLocation(first);
+      expect(moved.dx, closeTo(map.center.dx - 45.5, 2));
+      expect(moved.dy, greaterThan(map.center.dy + 40));
+    });
+
     testWidgets('the corners of the map are the visible region', (
       tester,
     ) async {
