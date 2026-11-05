@@ -18,6 +18,7 @@ nav:
       - Guides:
           - Map & Camera: docs/map.md
           - Styles: docs/styles.md
+          - 3D Terrain: docs/terrain.md
           - Events: docs/events.md
           - User Interface: docs/ui.md
           - User Location: docs/user-location.md
