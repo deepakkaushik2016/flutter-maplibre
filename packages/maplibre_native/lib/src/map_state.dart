@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 
@@ -30,6 +31,21 @@ class MapLibreMapStateNative extends MapLibreMapState {
 
   /// Holds a terrain set while [_setStyle] loads a style.
   final _deferredTerrain = DeferredTerrain();
+
+  /// The generations of the style loads submitted to the map that it hasn't
+  /// started yet, oldest first.
+  ///
+  /// The map runs its commands in order, and each style load reports
+  /// `mapLoadingStarted` before anything else of that load: its
+  /// `mapStyleLoaded` or `mapLoadingFailed` follows its start, and the start
+  /// of a newer load cancels it. So the end of a load belongs to the load
+  /// that started last. Its generation can be older than the latest one: the
+  /// map may have ended a load before Dart submitted a newer style, whose
+  /// generation is already the latest by the time the event arrives.
+  final _submittedStyleLoads = ListQueue<int>();
+
+  /// The generation of the style load that the map started last.
+  var _startedStyleLoad = 0;
 
   /// A projection of the latest published camera. Closed whenever the camera
   /// or extent changes, because a projection never sees later map changes.
@@ -274,10 +290,17 @@ class MapLibreMapStateNative extends MapLibreMapState {
             !snapshot.transitionInProgress) {
           _onCameraIdle();
         }
+      case mln.RuntimeEventType.mapLoadingStarted:
+        _startedStyleLoad = _submittedStyleLoads.isEmpty
+            // Not a load of _setStyle; none starts elsewhere.
+            ? _deferredTerrain.generation
+            : _submittedStyleLoads.removeFirst();
+        widget.onLoadingStarted?.call(const MapEventLoadingStarted());
       case mln.RuntimeEventType.mapStyleLoaded:
-        // The latest requested style when the load ended; a style requested
-        // later replaces this one.
-        unawaited(_onStyleLoaded(_deferredTerrain.generation));
+        // A style requested later replaces this one, and its own load hands
+        // it out, as on web.
+        if (_startedStyleLoad != _deferredTerrain.generation) return;
+        unawaited(_onStyleLoaded(_startedStyleLoad));
       case mln.RuntimeEventType.mapIdle:
         widget.onIdle?.call(const MapEventIdle());
       case mln.RuntimeEventType.mapSourceChanged:
@@ -293,7 +316,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
       case mln.RuntimeEventType.mapLoadingFailed:
         // Reported only for the style document, not for its resources.
         _deferredTerrain.styleLoadFailed(
-          _deferredTerrain.generation,
+          _startedStyleLoad,
           StateError('The style failed to load: ${event.message}'),
         );
         _onError(MapErrorKind.style, event.message);
@@ -303,8 +326,6 @@ class MapLibreMapStateNative extends MapLibreMapState {
         _onError(MapErrorKind.glyphs, event.message);
       case mln.RuntimeEventType.mapSpriteError:
         _onError(MapErrorKind.sprite, event.message);
-      case mln.RuntimeEventType.mapLoadingStarted:
-        widget.onLoadingStarted?.call(const MapEventLoadingStarted());
       case mln.RuntimeEventType.mapLoadingFinished:
         widget.onLoadingFinished?.call(const MapEventLoadingFinished());
       case mln.RuntimeEventType.mapStyleImageMissing:
@@ -836,15 +857,20 @@ class MapLibreMapStateNative extends MapLibreMapState {
     try {
       switch (style) {
         case MapStyleJson(:final json):
-          load = map.setStyleJson(jsonDecode(json));
+          load = _startStyleLoad(
+            generation,
+            () => map.setStyleJson(jsonDecode(json)),
+          );
         case MapStyleUrl(:final url):
-          load = map.setStyleUrl(url);
+          load = _startStyleLoad(generation, () => map.setStyleUrl(url));
         case MapStyleFile(:final path):
-          load = map.setStyleUrl(Uri.file(path).toString());
+          final url = Uri.file(path).toString();
+          load = _startStyleLoad(generation, () => map.setStyleUrl(url));
         case MapStyleAsset(:final asset):
           final json = await DefaultAssetBundle.of(context).loadString(asset);
           if (stale()) return;
-          load = map.setStyleJson(jsonDecode(json));
+          final decoded = jsonDecode(json);
+          load = _startStyleLoad(generation, () => map.setStyleJson(decoded));
       }
     } on Object catch (error) {
       // No style loads, so no terrain waits for one.
@@ -854,6 +880,30 @@ class MapLibreMapStateNative extends MapLibreMapState {
     // A style that fails to load is reported by the map's loading failed
     // event, and a newer style cancels this one.
     load.ignore();
+  }
+
+  /// Submits the style load of [generation] with [submit], which makes the
+  /// map call at once, so the load joins [_submittedStyleLoads] in the order
+  /// the map runs it.
+  Future<mln.CommandCompletion> _startStyleLoad(
+    int generation,
+    Future<mln.CommandCompletion> Function() submit,
+  ) {
+    _submittedStyleLoads.add(generation);
+    final load = submit();
+    load.then<void>(
+      (_) {},
+      onError: (Object error) {
+        // A call that the C API rejected, or that never ran, starts no load.
+        // A style that failed to parse started one, and its start may still
+        // be on its way.
+        if (error is! mln.MaplibreException ||
+            error.status != mln.Status.nativeError) {
+          _submittedStyleLoads.remove(generation);
+        }
+      },
+    );
+    return load;
   }
 
   @override

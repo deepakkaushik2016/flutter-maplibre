@@ -15,12 +15,14 @@ import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 
 /// The map events that the state always handles. Others, such as the render
 /// events of every frame, are only queued while [MapLibreMap] has a callback
-/// for them, see [MapLibreMapExt.eventMask].
+/// for them, see [MapLibreMapExt.eventMask]. The start of each style load
+/// tells which load a loaded or failed event ends.
 final mln.RuntimeEventFlag _baseEventMask =
     mln.RuntimeEventFlag.mapCameraWillChange |
     mln.RuntimeEventFlag.mapCameraIsChanging |
     mln.RuntimeEventFlag.mapCameraDidChange |
     mln.RuntimeEventFlag.mapStyleLoaded |
+    mln.RuntimeEventFlag.mapLoadingStarted |
     mln.RuntimeEventFlag.mapIdle |
     mln.RuntimeEventFlag.mapSourceChanged |
     mln.RuntimeEventFlag.mapLoadingFailed |
@@ -33,9 +35,6 @@ extension MapLibreMapExt on MapLibreMap {
   /// The events that the callbacks of this map need.
   mln.RuntimeEventFlag get eventMask =>
       _baseEventMask |
-      (onLoadingStarted != null
-          ? mln.RuntimeEventFlag.mapLoadingStarted
-          : mln.RuntimeEventFlag.none) |
       (onLoadingFinished != null
           ? mln.RuntimeEventFlag.mapLoadingFinished
           : mln.RuntimeEventFlag.none) |

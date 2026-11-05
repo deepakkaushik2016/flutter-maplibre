@@ -315,6 +315,37 @@ void runTests() {
       );
     });
 
+    testWidgets('a load that ended before a newer style was set keeps no '
+        'terrain set for the newer one', (tester) async {
+      final map = await pumpTerrainMap(tester);
+      fixture.holdStyles();
+      // In one turn of the event loop: a style that MapLibre Native parses,
+      // and so loads, as soon as it runs the call, and then a style that
+      // waits for its document. The first load's end reaches Dart only once
+      // the second style is the latest.
+      map
+        ..setOptionsNow(
+          _options(MapStyle.json(jsonEncode(fixture.style(color: '#ffddbb')))),
+        )
+        ..setOptionsNow(
+          _options(fixture.styleUrl(fixture.style(color: '#bbddff'))),
+        );
+      var applied = false;
+      final applying = map.style.setTerrain(_terrain);
+      unawaited(
+        applying.then((_) => applied = true, onError: (_) => applied = true),
+      );
+      final since = map.styleLoads;
+      // The first style's events arrive meanwhile.
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(applied, isFalse, reason: 'the newer style has not loaded');
+      fixture.releaseStyles();
+      await map.waitForStyleLoad(since: since);
+      await map.pumpFuture(applying, reason: 'setTerrain never completed');
+      await tester.pump();
+      expect(map.style.terrain, _terrain);
+    });
+
     testWidgets('reads the terrain of a style document', (tester) async {
       for (final (json, terrain) in [
         (

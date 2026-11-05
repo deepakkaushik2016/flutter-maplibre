@@ -82,6 +82,14 @@ class TestMap {
     await tester.pumpWidget(_app(options));
   }
 
+  /// Hands the map new [options] in this turn of the event loop, rather
+  /// than in the next frame, so no map event arrives between two calls.
+  void setOptionsNow(MapOptions options) {
+    final binding = tester.binding;
+    binding.attachRootWidget(binding.wrapWithDefaultView(_app(options)));
+    binding.buildOwner!.buildScope(binding.rootElement!);
+  }
+
   /// The style of the map, replaced whenever a style loads.
   StyleController get style => controller.style!;
 
