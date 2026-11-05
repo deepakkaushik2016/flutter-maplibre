@@ -181,10 +181,9 @@ abstract interface class MapController {
   /// the terrain's source, and before the map has drawn its first frame. A
   /// point off screen reads its height while its DEM tile stays loaded.
   ///
-  /// maplibre-gl-js draws each DEM pixel at its centre and MapLibre Native at
-  /// its corner, so on steep ground the platforms can differ by the slope
-  /// across half a DEM pixel. Before maplibre-gl-js 6.15.0, ground at exactly
-  /// 0 m reads null on web.
+  /// Every platform draws a DEM pixel's height at the pixel's centre, so the
+  /// platforms read the same height from the same tiles. Before
+  /// maplibre-gl-js 6.15.0, ground at exactly 0 m reads null on web.
   ///
   /// Each call is one query of the map's latest frame on native, or one call
   /// into maplibre-gl-js on web.

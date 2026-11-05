@@ -798,11 +798,6 @@ Each entry: the decision, then why.
 - On web, a style error event that `setStyle` didn't cause, such as one
   from a call on the old style during a load, also fails a terrain that
   waits for that load.
-- MapLibre Native draws a DEM pixel at its corner, i/256 of the tile, and
-  gl-js at its centre, (i + 0.5)/256, so the same tiles draw the ground half
-  a DEM pixel apart, and `queryTerrainElevation` reads what each draws: on
-  the synthetic ridge's 37 % slope, 18 m apart (1550 m native, 1532 m web).
-  On Mapterhorn's zoom-12 tiles at 47° N half a pixel is about 6.5 m.
 - The C API's `invalidState` before a session's first frame is mapped to
   null but no test reaches it: a query from `onMapCreated` runs after the
   frame the renderer has already demanded.
