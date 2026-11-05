@@ -193,6 +193,11 @@ Each entry: the decision, then why.
   retains its surface.
   This replaced a blit into a `CVPixelBufferPool` buffer that the Dart UI
   thread waited for on every frame.
+- **The plugin runs no display link; Flutter's vsync paces the map.** A map
+  shows at most one new frame per Flutter frame, and Flutter's iOS display
+  link reaches 120 Hz on ProMotion iPhones only when the app's Info.plist
+  sets `CADisableMinimumFrameDurationOnPhone`, which the example does and
+  the setup guide tells apps to.
 - **Dart finds the C API through `+[MaplibreNativePlugin symbols]`, called
   with `objc_msgSend`, not `DynamicLibrary.process()`.** SwiftPM links the
   plugin statically into the app, and release builds strip global symbols

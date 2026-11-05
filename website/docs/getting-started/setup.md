@@ -61,6 +61,19 @@ setup steps, see [Platform setup](platforms.md).
 | Windows  | `maplibre_native` | MapLibre Native | Vulkan, shared with Flutter via D3D11  | Vulkan 1.1 driver       |
 | Linux    | `maplibre_native` | MapLibre Native | Vulkan, shared with Flutter via OpenGL | Vulkan 1.1 driver       |
 
+!!! tip "120 Hz on iPhone"
+
+    Flutter draws at most 60 frames a second on an iPhone with a ProMotion
+    display unless the app's `ios/Runner/Info.plist` sets
+    `CADisableMinimumFrameDurationOnPhone` to `true`. A map shows at most one
+    new frame per Flutter frame, so it needs this to reach 120 Hz. The
+    plugin runs no display link of its own, so there is nothing else to set:
+
+    ```xml
+    <key>CADisableMinimumFrameDurationOnPhone</key>
+    <true/>
+    ```
+
 !!! warning "Only on web"
 
     Projections other than Mercator and `VideoSource` are only supported on
