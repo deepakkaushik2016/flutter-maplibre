@@ -692,30 +692,10 @@ void runTests() {
 const double _kmPerDegree = 6371.0088 * pi / 180;
 
 /// The height in meters that the map draws at [point] of the synthetic
-/// ridge, with [exaggeration].
-///
-/// The fixture's tiles place DEM pixel i at i/256 of the tile, as MapLibre
-/// Native draws it. maplibre-gl-js draws pixel i at its centre, (i + 0.5)/256,
-/// so the same tiles draw each height half a DEM pixel (52 m) further
-/// south-east there.
-double _drawnHeight(Geographic point, double exaggeration) {
-  var lat = point.lat;
-  var lng = point.lon;
-  if (kIsWeb) {
-    const halfPixel = 0.5 / 256;
-    const tiles = 1 << alpsDemZoom;
-    final x = (lng + 180) / 360 * tiles;
-    final y = (1 - log(tan(pi / 4 + lat * pi / 360)) / pi) / 2 * tiles;
-    (:lat, :lng) = tilePointLatLng(
-      alpsDemZoom,
-      0,
-      0,
-      x - halfPixel,
-      y - halfPixel,
-    );
-  }
-  return alpsHeight(lat, lng) * exaggeration;
-}
+/// ridge, with [exaggeration]. The fixture's tiles hold each DEM pixel's
+/// height at the pixel's centre, where every platform draws it.
+double _drawnHeight(Geographic point, double exaggeration) =>
+    alpsHeight(point.lat, point.lon) * exaggeration;
 
 /// Points of the synthetic ridge ahead of the Alps camera, which looks north.
 const Map<String, Geographic> _groundPoints = {

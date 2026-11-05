@@ -22,9 +22,9 @@ void main() {
   }
 }
 
-/// The RGB rows of a Terrarium tile. MapLibre places pixel `i` at `i / 256`
-/// of the tile and reads whole meters, so each pixel holds the rounded
-/// height at that point.
+/// The RGB rows of a Terrarium tile. MapLibre (Native and GL JS) places
+/// pixel `i` at its centre, `(i + 0.5) / 256` of the tile, and reads whole
+/// meters, so each pixel holds the rounded height at that point.
 Uint8List _terrarium(int tileX, int tileY) {
   final rgb = Uint8List(_size * _size * 3);
   for (var row = 0; row < _size; row++) {
@@ -33,8 +33,8 @@ Uint8List _terrarium(int tileX, int tileY) {
         alpsDemZoom,
         tileX,
         tileY,
-        column / _size,
-        row / _size,
+        (column + 0.5) / _size,
+        (row + 0.5) / _size,
       );
       final value = alpsHeight(lat, lng).round() + 32768;
       final i = (row * _size + column) * 3;

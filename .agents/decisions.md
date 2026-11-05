@@ -719,11 +719,10 @@ Each entry: the decision, then why.
   `assets/terrain/alps/`; a loopback server serves them on native, and the
   app's assets on web. Tests can assert drawn heights against
   `alpsHeight` × exaggeration.
-- **Terrain elevation tests place the fixture's DEM pixels per platform.**
-  The tiles put pixel i at i/256 of the tile, where MapLibre Native draws
-  it; gl-js draws it at the pixel's centre, (i + 0.5)/256, so its expected
-  height is `alpsHeight` half a DEM pixel north-west. Both then agree with
-  their oracle within 0.5 m.
+- **The fixture's tiles hold each DEM pixel's height at the pixel's
+  centre**, (i + 0.5)/256 of the tile, where MapLibre Native and gl-js both
+  draw it, so every platform's expected height is `alpsHeight` ×
+  exaggeration, within 0.5 m.
 - **Native terrain tests cast their own rays to find the ground on
   screen** (`GroundView`, `shared/alps_fixture.dart`), because native
   projections are at sea level (see Known gaps). It rebuilds the eye from
