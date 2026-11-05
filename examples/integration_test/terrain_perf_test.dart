@@ -10,11 +10,15 @@
 // gate, as on an emulator, whose GPU says nothing about a phone's.
 // --dart-define=TERRAIN_PERF_DEM=<TileJSON URL> flies over that DEM from
 // the network instead of the vendored fixture, as over Mapterhorn's.
+// --dart-define=TERRAIN_PERF_BASEMAP=<style URL> also draws that basemap
+// under the hillshade and the trail, as an app does, over Mapterhorn's DEM
+// unless TERRAIN_PERF_DEM names another.
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
@@ -26,6 +30,39 @@ const _informational = bool.fromEnvironment('TERRAIN_PERF_INFORMATIONAL');
 
 /// A TileJSON URL of a Terrarium DEM to fly over instead of the fixture.
 const _networkDem = String.fromEnvironment('TERRAIN_PERF_DEM');
+
+/// A style URL of a basemap to draw under the terrain's hillshade and trail.
+const _basemap = String.fromEnvironment('TERRAIN_PERF_BASEMAP');
+
+const _mapterhorn = 'https://tiles.mapterhorn.com/tilejson.json';
+
+/// [basemap] with the raster DEM source `alps` of [dem], and the hillshade
+/// and trail of [trailStyle] under its labels.
+Map<String, Object?> _overBasemap(Map<String, Object?> basemap, String dem) {
+  final layers = (basemap['layers']! as List<Object?>).toList();
+  final labels = layers.indexWhere(
+    (layer) => (layer! as Map<String, Object?>)['type'] == 'symbol',
+  );
+  final at = labels < 0 ? layers.length : labels;
+  final trail = trailStyle({
+    'sources': {
+      'alps': {'type': 'raster-dem', 'url': dem, 'encoding': 'terrarium'},
+    },
+    'layers': <Object?>[],
+  });
+  return {
+    ...basemap,
+    'sources': {
+      ...(basemap['sources']! as Map<String, Object?>),
+      ...(trail['sources']! as Map<String, Object?>),
+    },
+    'layers': [
+      ...layers.take(at),
+      ...(trail['layers']! as List<Object?>),
+      ...layers.skip(at),
+    ],
+  };
+}
 
 /// The gate: the map's median frame time, its 95th percentile and its
 /// longest frame after the warm-up, and the 95th percentile of the latency
@@ -71,9 +108,18 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
       final fixture = await AlpsFixture.start();
       addTearDown(fixture.close);
 
-      final network = _networkDem.isNotEmpty;
+      final basemap = _basemap.isEmpty
+          ? null
+          : jsonDecode((await http.get(Uri.parse(_basemap))).body)
+                as Map<String, Object?>;
+      final network = _networkDem.isNotEmpty || basemap != null;
       final base = fixture.style();
-      final style = network
+      final style = basemap != null
+          ? _overBasemap(
+              basemap,
+              _networkDem.isEmpty ? _mapterhorn : _networkDem,
+            )
+          : network
           ? {
               ...base,
               'sources': {
@@ -89,7 +135,9 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
       final map = await pumpMap(
         tester,
         options: MapOptions(
-          style: MapStyle.json(jsonEncode(trailStyle(style))),
+          style: MapStyle.json(
+            jsonEncode(basemap != null ? style : trailStyle(style)),
+          ),
           initCamera: alpsCamera,
         ),
       );
@@ -105,7 +153,10 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
             : kReleaseMode
             ? 'release'
             : 'debug',
-        'dem': network ? _networkDem : 'fixture',
+        'dem': network
+            ? (_networkDem.isEmpty ? _mapterhorn : _networkDem)
+            : 'fixture',
+        'basemap': basemap != null ? _basemap : 'none',
       };
       // What the map got wrong, and the numbers that missed the gate.
       final failures = <String>[];
