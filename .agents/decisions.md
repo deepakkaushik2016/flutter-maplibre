@@ -824,6 +824,16 @@ Each entry: the decision, then why.
   on devices** (`terrain_soak_test.dart`, `terrain_perf_test.dart`, not in
   `all_test.dart`): the soak lasts 10 minutes, and debug builds say nothing
   about frame times.
+- **The soak allows one hitch after its warm-up, not none.** A hitch is a
+  map or Flutter frame over 250 ms; a second one fails the soak, and so does
+  any frame over 1 s. A single-frame ceiling failed on an OS interruption
+  alone (a notification, another process, a thermal step), and the
+  iPhone 15 Plus soak passed it at 249.75 ms. An interruption is isolated,
+  while a hitch of the map's own recurs, at the terrain toggles every 30 s
+  or along the repeating flight, so it shows up at least twice over the
+  ~18 toggles after the warm-up. A percentile rule (p99.9) would hide a
+  hitch that recurs only at the toggles: some 20 frames of ~36,000. The
+  perf gate keeps its own worst-frame target.
 - **A map's frame time is measured on screen, not from Flutter's frames
   alone.** The engine renders on its own thread at its own rate, and Flutter
   shows its newest frame in the next Flutter frame, so Flutter can draw

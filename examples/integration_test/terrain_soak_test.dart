@@ -42,8 +42,18 @@ const _maxGrowth = 1.15;
 /// toggle.
 const _warmUp = Duration(minutes: 1);
 
-/// The longest frame allowed after [_warmUp], in ms.
-const _maxFrameMs = 250.0;
+/// A hitch: a frame after [_warmUp] longer than this, in ms.
+const _hitchMs = 250.0;
+
+/// How many hitches the soak allows: one, which an OS interruption (a
+/// notification, a backgrounded process, a thermal step) can cause on its
+/// own. A hitch of the map's own recurs, at the terrain toggles every 30 s
+/// or along the flight, so it shows up at least twice.
+const _maxHitches = 1;
+
+/// The longest frame allowed at all after [_warmUp], in ms: a stall no
+/// interruption explains.
+const _maxFrameMs = 1000.0;
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -137,6 +147,10 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
       'terrain_toggles': toggles,
       'map_frames': mapFrames.toJson(),
       'flutter_frames': flutterFrames.toJson(),
+      'map_hitches': recorder.mapFrameMs.where((ms) => ms > _hitchMs).length,
+      'flutter_hitches': recorder.flutterFrameMs
+          .where((ms) => ms > _hitchMs)
+          .length,
     };
     binding.reportData = {...?binding.reportData, 'terrain_soak': report};
     debugPrint('terrain soak: ${jsonEncode(report)}');
@@ -159,16 +173,22 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
           'to ${_mb(rss.last)} MB, more than ${((_maxGrowth - 1) * 100).round()} %: '
           '${report['rss_mb']}',
     );
-    expect(
-      mapFrames.max,
-      lessThanOrEqualTo(_maxFrameMs),
-      reason: 'a map frame after the warm-up took ${mapFrames.max} ms',
-    );
-    expect(
-      flutterFrames.max,
-      lessThanOrEqualTo(_maxFrameMs),
-      reason: 'a Flutter frame after the warm-up took ${flutterFrames.max} ms',
-    );
+    for (final (name, frames, stats) in [
+      ('map', recorder.mapFrameMs, mapFrames),
+      ('Flutter', recorder.flutterFrameMs, flutterFrames),
+    ]) {
+      final hitches = frames.where((ms) => ms > _hitchMs).toList();
+      expect(
+        hitches.length,
+        lessThanOrEqualTo(_maxHitches),
+        reason: '$name frames after the warm-up over $_hitchMs ms: $hitches',
+      );
+      expect(
+        stats.max,
+        lessThanOrEqualTo(_maxFrameMs),
+        reason: 'a $name frame after the warm-up took ${stats.max} ms',
+      );
+    }
   }, timeout: const Timeout(Duration(minutes: _minutes + 5)));
 }
 
