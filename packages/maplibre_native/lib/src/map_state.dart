@@ -35,9 +35,12 @@ class MapLibreMapStateNative extends MapLibreMapState {
   /// or extent changes, because a projection never sees later map changes.
   mln.MapProjectionHandle? _projection;
 
-  /// The projection of the map frame on screen. The map image trails the
-  /// latest camera by a frame or two, so [camera] and screen locations follow
-  /// this one, and widgets over the map stay on what they mark.
+  /// The view of the map frame on screen, and its projection once a screen
+  /// location needs it. The map image trails the latest camera by a frame or
+  /// two, so [camera] and screen locations follow this one, and widgets over
+  /// the map stay on what they mark. The projection is made on demand, not
+  /// for every frame.
+  mln.MapView? _shownView;
   mln.MapProjectionHandle? _shownProjection;
 
   /// The session extent generation of the frame on screen. Screen locations
@@ -422,16 +425,11 @@ class MapLibreMapStateNative extends MapLibreMapState {
 
   /// Moves [camera] and screen locations to the frame that Flutter shows
   /// next, so widgets over the map rebuild in the same frame as the map.
-  void _onFrameShown(
-    mln.MapProjectionHandle projection,
-    mln.RenderFrameResult frame,
-  ) {
-    if (_disposed) {
-      projection.release();
-      return;
-    }
+  void _onFrameShown(mln.RenderFrameResult frame) {
+    if (_disposed) return;
     _shownProjection?.release();
-    _shownProjection = projection;
+    _shownProjection = null;
+    _shownView = frame.view;
     final shown = frame.view.camera.toCameraPosition();
     final resized = frame.generation != _shownExtentGeneration;
     _shownExtentGeneration = frame.generation;
@@ -643,10 +641,13 @@ class MapLibreMapStateNative extends MapLibreMapState {
     if (map == null) {
       throw StateError('The map has not been created yet.');
     }
-    return _shownProjection ??
-        (_projection ??= mln.MapProjectionHandle.create(
-          map.getSnapshot().view,
-        ));
+    final shownView = _shownView;
+    if (shownView != null) {
+      return _shownProjection ??= mln.MapProjectionHandle.create(shownView);
+    }
+    return _projection ??= mln.MapProjectionHandle.create(
+      map.getSnapshot().view,
+    );
   }
 
   void _invalidateProjection() {

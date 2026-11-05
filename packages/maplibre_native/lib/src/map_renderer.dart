@@ -147,17 +147,15 @@ final class MapRenderer implements FrameTargetHost {
   /// Receives every runtime event the map queues.
   void Function(RuntimeEvent event)? onEvent;
 
-  /// Receives the projection and render result of each frame once
-  /// Flutter can show it, so overlays can follow what is on screen rather than
-  /// the latest camera, which the map image reaches a frame or two later. The
-  /// projection converts for the view the frame drew, and the receiver owns
-  /// it.
+  /// Receives the render result of each frame once Flutter can show it, so
+  /// overlays can follow what is on screen rather than the latest camera,
+  /// which the map image reaches a frame or two later. A projection of its
+  /// view converts for what the frame drew.
   ///
   /// On Windows, Linux, iOS, and macOS Flutter shows the frame in its next
   /// frame. On Android the frame went to the Surface, and Flutter takes the
   /// newest image there, which is nearly always the same one.
-  void Function(MapProjectionHandle projection, RenderFrameResult frame)?
-  onFrameShown;
+  void Function(RenderFrameResult frame)? onFrameShown;
 
   /// Creates a renderer of [extent] whose map queues the events of
   /// [eventMask] and decodes FastPFOR in MLT tiles if [fastPforEnabled].
@@ -170,8 +168,7 @@ final class MapRenderer implements FrameTargetHost {
     bool fastPforEnabled = false,
     Future<void> Function(MapHandle map)? setUp,
     void Function(RuntimeEvent event)? onEvent,
-    void Function(MapProjectionHandle projection, RenderFrameResult frame)?
-    onFrameShown,
+    void Function(RenderFrameResult frame)? onFrameShown,
   }) async {
     // Also initializes the platform's graphics context, which Android needs
     // before the C library's first use.
@@ -334,12 +331,9 @@ final class MapRenderer implements FrameTargetHost {
     }
   }
 
-  /// Hands [frame] and the projection of the view it drew to [onFrameShown]
-  /// once the frame reached Flutter.
+  /// Hands [frame] to [onFrameShown] once the frame reached Flutter.
   void _showFrame(RenderFrameResult frame) {
-    final onFrameShown = this.onFrameShown;
-    if (_disposed || onFrameShown == null) return;
-    onFrameShown(MapProjectionHandle.create(frame.view), frame);
+    if (!_disposed) onFrameShown?.call(frame);
   }
 
   void _onEvents(List<RuntimeEvent> events) {
