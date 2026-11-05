@@ -312,7 +312,12 @@ final class MapRenderer implements FrameTargetHost {
       final frame = result;
       unawaited(onGpuQueue(() => _present(frame)));
     } else if (result.disposition == RenderResult.targetNotReady) {
-      Timer(const Duration(milliseconds: 16), demandFrame);
+      // A target that stopped taking frames demands one once it takes them
+      // again; one that takes them but whose session couldn't, such as
+      // before its first surface, has no event to wait for.
+      if (_target.acceptsFrames) {
+        Timer(const Duration(milliseconds: 16), demandFrame);
+      }
     } else {
       demandFrame();
     }
