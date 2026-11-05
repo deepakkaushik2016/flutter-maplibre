@@ -193,11 +193,23 @@ Each entry: the decision, then why.
   retains its surface.
   This replaced a blit into a `CVPixelBufferPool` buffer that the Dart UI
   thread waited for on every frame.
+- **When Flutter never takes a frame, the ring doesn't fill.** A texture
+  that no `Texture` widget shows, or a map kept alive off screen, leaves
+  `copyPixelBuffer` uncalled. Each present then replaces a presented frame
+  that Flutter never took, which frees that slot at once, so the session
+  keeps rendering into the rest of the ring whenever the map changes, and
+  idles like any map when it doesn't (frames wait for a map update). No
+  slot leaks and nothing spins: `targetNotReady`, and its 16 ms retry, only
+  follow a ring whose every slot the C library quarantined, or a session
+  without a target. Pause a map that is off screen for long to save its
+  render work.
 - **The plugin runs no display link; Flutter's vsync paces the map.** A map
   shows at most one new frame per Flutter frame, and Flutter's iOS display
-  link reaches 120 Hz on ProMotion iPhones only when the app's Info.plist
-  sets `CADisableMinimumFrameDurationOnPhone`, which the example does and
-  the setup guide tells apps to.
+  link can only go above 60 Hz on ProMotion iPhones when the app's
+  Info.plist sets `CADisableMinimumFrameDurationOnPhone`, which the example
+  does and the setup guide tells apps to. Not yet verified on a device: the
+  iPhone 17 Pro Max ran Flutter at 60 Hz with the key set (Plan 02 Task 5),
+  which is unexplained.
 - **Dart finds the C API through `+[MaplibreNativePlugin symbols]`, called
   with `objc_msgSend`, not `DynamicLibrary.process()`.** SwiftPM links the
   plugin statically into the app, and release builds strip global symbols
