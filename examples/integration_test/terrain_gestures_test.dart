@@ -9,6 +9,7 @@ import 'package:maplibre/maplibre.dart';
 
 import 'shared/alps_fixture.dart';
 import 'shared/browser.dart';
+import 'shared/engine_state.dart';
 import 'shared/test_map.dart';
 
 void main() {
@@ -529,15 +530,42 @@ void runTests() {
       }
     });
 
-    testWidgets('setTerrainLoadMode completes', (tester) async {
+    testWidgets('setTerrainLoadMode sets the mode of every style', (
+      tester,
+    ) async {
       final (map, ground) = await pumpTerrainMap(tester);
+      // Web has no load modes: the calls only complete there.
+      expect(
+        engineTerrainLoadMode(tester),
+        kIsWeb ? null : TerrainLoadMode.quality,
+        reason: 'the default',
+      );
       for (final mode in TerrainLoadMode.values.reversed) {
         await map.pumpFuture(
           map.controller.setTerrainLoadMode(mode),
           reason: 'setTerrainLoadMode($mode) never completed',
         );
+        expect(engineTerrainLoadMode(tester), kIsWeb ? null : mode);
       }
+      await map.controller.setTerrainLoadMode(TerrainLoadMode.balanced);
       await fixture.waitUntilSettled(map, ground);
+      // A new style keeps the mode.
+      final since = map.styleLoads;
+      await map.setOptions(
+        MapOptions(
+          style: MapStyle.json(
+            jsonEncode({...fixture.style(), 'name': 'another style'}),
+          ),
+          initCamera: alpsCamera,
+        ),
+      );
+      await map.waitForStyleLoad(since: since);
+      await map.style.setTerrain(_terrain);
+      await fixture.waitUntilSettled(map, ground);
+      expect(
+        engineTerrainLoadMode(tester),
+        kIsWeb ? null : TerrainLoadMode.balanced,
+      );
     });
   });
 }

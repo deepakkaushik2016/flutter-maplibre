@@ -919,6 +919,17 @@ class MapLibreMapStateNative extends MapLibreMapState {
     );
   }
 
+  /// The terrain load mode that MapLibre Native uses for the map, read back
+  /// from the map's state, or null before the map exists.
+  @visibleForTesting
+  TerrainLoadMode? get engineTerrainLoadMode =>
+      switch (_map?.getSnapshot().terrain.loadMode) {
+        mln.TerrainLoadMode.quality => TerrainLoadMode.quality,
+        mln.TerrainLoadMode.balanced => TerrainLoadMode.balanced,
+        mln.TerrainLoadMode.performance => TerrainLoadMode.performance,
+        _ => null,
+      };
+
   @override
   Future<double?> queryTerrainElevation(Geographic point) async {
     final elevation = await _queryFrame(

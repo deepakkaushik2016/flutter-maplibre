@@ -58,6 +58,8 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   it and finds its ground on screen. `shared/terrain_load.dart` flies over
   it and measures frame times for `terrain_soak_test.dart` and
   `terrain_perf_test.dart`, which run on their own, not in `all_test.dart`.
+  `shared/engine_state.dart` reads back what MapLibre Native applied to a
+  map, below the public API.
 - `.github/workflows/docs.yml`: builds the website (`website/`, `mkdocs.yml`)
   on every pull request; on main it also builds the example app for web as
   the demo and deploys both to GitHub Pages. Links from the website to the
