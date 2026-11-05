@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The integration tests serve styles and tiles over plain HTTP from the
      test host. MapLibre Native loads them through HttpURLConnection, which
-     follows this config, so debug builds allow cleartext to the loopback
+     follows this config, so debug and profile builds allow cleartext to the loopback
      addresses only. -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">

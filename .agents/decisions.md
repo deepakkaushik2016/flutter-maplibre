@@ -753,6 +753,9 @@ Each entry: the decision, then why.
   it against the engine's own terrain cast: a feature query at the grabbed
   point finds a polygon laid on the ground there. On web it uses gl-js's
   projection, which follows the terrain.
+- **Android profile builds allow cleartext to the loopback addresses**, as
+  debug builds do, so the tests' loopback fixture servers reach the map in
+  the profile builds that measure performance.
 - **Projection integration tests run at zoom 4.** At the minimum zoom of a
   wide desktop window the world is narrower than the window, and screen
   corners wrap to the neighbouring world copy.
