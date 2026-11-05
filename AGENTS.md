@@ -55,7 +55,9 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   launch; `integration_test/shared/test_map.dart` pumps a map and waits for
   its events, frames and features. `integration_test/shared/alps_dem.dart`
   is the synthetic DEM of the terrain tests, and `alps_fixture.dart` serves
-  it and finds its ground on screen.
+  it and finds its ground on screen. `shared/terrain_load.dart` flies over
+  it and measures frame times for `terrain_soak_test.dart`, which runs on
+  its own, not in `all_test.dart`.
 - `.github/workflows/docs.yml`: builds the website (`website/`, `mkdocs.yml`)
   on every pull request; on main it also builds the example app for web as
   the demo and deploys both to GitHub Pages. Links from the website to the
@@ -78,6 +80,7 @@ dart analyze --fatal-warnings --fatal-infos
 flutter test                                  # inside a package
 cd examples && flutter test integration_test/all_test.dart -d windows  # or linux, macos, an iOS simulator, an Android device
 cd examples && flutter drive --driver test_driver/integration_test.dart --target integration_test/all_test.dart -d web-server --browser-name chrome  # needs chromedriver on port 4444
+cd examples && flutter drive --profile --driver test_driver/integration_test.dart --target integration_test/terrain_soak_test.dart -d <device>  # 10-minute terrain soak: RSS and hitches
 cd tool/codegen && dart run ffigen.dart       # after changing the desktop or Darwin C API header
 cd tool/codegen && dart run jnigen.dart       # after changing MaplibreNativeApi.kt; build examples for Android in release first
 cd tool/codegen && dart run style_layers.dart # after raising the style spec version in the script

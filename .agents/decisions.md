@@ -756,6 +756,19 @@ Each entry: the decision, then why.
 - **Android profile builds allow cleartext to the loopback addresses**, as
   debug builds do, so the tests' loopback fixture servers reach the map in
   the profile builds that measure performance.
+- **The terrain soak test runs alone, in a profile build on a device**
+  (`terrain_soak_test.dart`, not in `all_test.dart`): it lasts 10 minutes,
+  and debug builds say nothing about frame times.
+- **A map's frame time is measured on screen, not from Flutter's frames
+  alone.** The engine renders on its own thread at its own rate, and Flutter
+  shows its newest frame in the next Flutter frame, so Flutter can draw
+  frames with an old map image. `MapController.camera` follows the map frame
+  on screen, so during a camera animation the Flutter frames whose camera
+  changed are those that showed a new map frame, and the time between their
+  vsyncs is the map's frame time (`MapFrameRecorder`,
+  `shared/terrain_load.dart`). The engine's own render statistics
+  (`mapRenderFrameFinished`) are not queued: an event per frame for no
+  caller.
 - **Projection integration tests run at zoom 4.** At the minimum zoom of a
   wide desktop window the world is narrower than the window, and screen
   corners wrap to the neighbouring world copy.
