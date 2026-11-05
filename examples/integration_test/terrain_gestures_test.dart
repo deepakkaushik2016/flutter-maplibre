@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -373,6 +374,116 @@ void runTests() {
       expectCenterOnGround(map, ground);
     }, skip: kIsWeb);
 
+    /// Screen points over the ground: the center, both sides, near and far.
+    const groundPoints = [
+      Offset.zero,
+      Offset(-120, 0),
+      Offset(120, 60),
+      Offset(0, 200),
+      Offset(0, -150),
+    ];
+
+    testWidgets('toLngLatOnTerrain finds the ground that the map draws', (
+      tester,
+    ) async {
+      final (map, ground) = await pumpTerrainMap(tester);
+      for (final offset in groundPoints) {
+        final point = map.center + offset;
+        final found = await map.controller.toLngLatOnTerrain(point);
+        expect(found, isNotNull, reason: '$point');
+        final error = (ground.toScreen(found!) - point).distance;
+        final seaLevel = map.controller.toLngLat(point);
+        debugPrint(
+          'toLngLatOnTerrain($point): ${error.toStringAsFixed(2)} px off, '
+          '${_meters(found, seaLevel).round()} m from toLngLat',
+        );
+        expect(error, lessThan(1));
+        // toLngLat is at sea level on native, far behind the ground.
+        if (!kIsWeb) expect(_meters(found, seaLevel), greaterThan(500));
+      }
+    });
+
+    testWidgets('toScreenLocationOnTerrain draws the ground at its point', (
+      tester,
+    ) async {
+      final (map, ground) = await pumpTerrainMap(tester);
+      for (final offset in groundPoints) {
+        final point = map.center + offset;
+        final location = await map.controller.toScreenLocationOnTerrain(
+          ground.groundAt(point),
+        );
+        debugPrint('toScreenLocationOnTerrain at $point: $location');
+        expect(location, isNotNull, reason: '$point');
+        expect((location!.offset - point).distance, lessThan(1));
+        expect(location.occluded, isFalse);
+      }
+    });
+
+    testWidgets('toScreenLocationOnTerrain sees a ridge hide the ground', (
+      tester,
+    ) async {
+      final (map, ground) = await pumpTerrainMap(tester);
+      // From 5 km south of the crest, looking north over it: the slope 3 km
+      // north of the crest is behind it, and the valley floor 8 km north
+      // shows over it.
+      await map.controller.moveCamera(
+        const CameraUpdate.position(
+          center: Geographic(lon: alpsLng, lat: alpsLat - 5 / _kmPerDegree),
+          zoom: 12,
+        ),
+      );
+      await map.waitForLatestFrame();
+      await fixture.waitUntilSettled(map, ground);
+      final screen = Offset.zero & map.size;
+      for (final (north, hidden) in const [(0, false), (3, true), (8, false)]) {
+        final point = Geographic(
+          lon: alpsLng,
+          lat: alpsLat + north / _kmPerDegree,
+        );
+        final location = await map.controller.toScreenLocationOnTerrain(point);
+        debugPrint('$north km north of the crest: $location');
+        expect(location, isNotNull, reason: '$north km');
+        expect(screen.contains(location!.offset), isTrue, reason: '$north km');
+        expect(location.occluded, hidden, reason: '$north km');
+      }
+    });
+
+    testWidgets('the terrain conversions find nothing without DEM tiles', (
+      tester,
+    ) async {
+      final (map, _) = await pumpTerrainMap(tester);
+      for (final point in const [
+        // East of the vendored tiles, whose server answers 404 there.
+        Geographic(lon: alpsLng + 0.8, lat: alpsLat),
+        // Far from them.
+        Geographic(lon: 0, lat: 0),
+      ]) {
+        expect(
+          await map.controller.toScreenLocationOnTerrain(point),
+          isNull,
+          reason: '$point',
+        );
+      }
+    });
+
+    testWidgets('the terrain conversions are the plain ones without one', (
+      tester,
+    ) async {
+      final map = await pumpMap(tester, options: terrainOptions());
+      await map.waitForLatestFrame();
+      for (final offset in groundPoints) {
+        final point = map.center + offset;
+        final lngLat = map.controller.toLngLat(point);
+        final found = await map.controller.toLngLatOnTerrain(point);
+        expect(found, isNotNull, reason: '$point');
+        expect(_meters(found!, lngLat), lessThan(1), reason: '$point');
+        final location = await map.controller.toScreenLocationOnTerrain(lngLat);
+        expect(location, isNotNull, reason: '$point');
+        expect((location!.offset - point).distance, lessThan(0.1));
+        expect(location.occluded, isFalse);
+      }
+    });
+
     testWidgets('setTerrainLoadMode completes', (tester) async {
       final (map, ground) = await pumpTerrainMap(tester);
       for (final mode in TerrainLoadMode.values.reversed) {
@@ -384,4 +495,15 @@ void runTests() {
       await fixture.waitUntilSettled(map, ground);
     });
   });
+}
+
+/// Kilometers per degree of latitude on the sphere of `alps_dem.dart`.
+const double _kmPerDegree = 6371.0088 * pi / 180;
+
+/// The distance in meters between [a] and [b], on a plane at their
+/// latitude, which is close enough for the few kilometers of the fixture.
+double _meters(Geographic a, Geographic b) {
+  final north = (a.lat - b.lat) * _kmPerDegree * 1000;
+  final east = (a.lon - b.lon) * _kmPerDegree * 1000 * cos(a.lat * pi / 180);
+  return sqrt(north * north + east * east);
 }
