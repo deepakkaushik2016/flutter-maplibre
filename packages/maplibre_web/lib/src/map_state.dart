@@ -46,6 +46,10 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// The `style.load` listener of the latest [_setStyle].
   JSExportedDartFunction? _styleLoadListener;
 
+  /// The URL that the latest [_setStyle] loads its style from, or null for a
+  /// style of JSON text.
+  String? _loadingStyleUrl;
+
   /// The style generation that the map's `load` event reports: the first
   /// style's, or that of a swap gl-js diffed into it without changes before
   /// it loaded.
@@ -162,10 +166,14 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
               event.has('tile')) {
             return;
           }
-          final message = event
-              .getProperty<JSObject?>('error'.toJS)
-              ?.getProperty<JSString?>('message'.toJS)
-              ?.toDart;
+          final error = event.getProperty<JSObject?>('error'.toJS);
+          // A failed request names its URL. One for another URL than the
+          // style's is a sprite or another resource of a style, which gl-js
+          // loads without it. Any other error ends the wait: an error that
+          // ended a load but didn't would hold setTerrain forever.
+          final url = error?.getProperty<JSString?>('url'.toJS)?.toDart;
+          if (url != null && url != _loadingStyleUrl) return;
+          final message = error?.getProperty<JSString?>('message'.toJS)?.toDart;
           _deferredTerrain.styleLoadFailed(
             _deferredTerrain.generation,
             StateError('The style failed to load: $message'),
@@ -828,12 +836,18 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     MapStyleJson(:final json) =>
       (jsonDecode(json) as Map<String, dynamic>).jsify() ??
           (throw StateError('Failed to convert style JSON to JS object.')),
-    MapStyleUrl(:final url) => url.toJS,
-    MapStyleAsset(:final asset) => AssetManager().getAssetUrl(asset).toJS,
+    MapStyleUrl() || MapStyleAsset() => _styleUrl(style)!.toJS,
     MapStyleFile() => throw UnsupportedError(
       'MapStyle.file is not supported on web, use MapStyle.url or '
       'MapStyle.asset.',
     ),
+  };
+
+  /// The URL that gl-js loads [style] from, or null for JSON text.
+  static String? _styleUrl(MapStyle style) => switch (style) {
+    MapStyleUrl(:final url) => url,
+    MapStyleAsset(:final asset) => AssetManager().getAssetUrl(asset),
+    MapStyleJson() || MapStyleFile() => null,
   };
 
   /// Loads [style], see [MapOptions.style].
@@ -842,6 +856,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     // old one go with the old style.
     layerManager = null;
     final generation = _deferredTerrain.styleLoading();
+    _loadingStyleUrl = _styleUrl(style);
     // A style replaced before it loaded fires no `style.load` of its own.
     if (_styleLoadListener case final listener?) {
       _map.off(interop.MapEventType.styleLoad, listener);

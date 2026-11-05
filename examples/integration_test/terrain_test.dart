@@ -60,6 +60,32 @@ class _Fixture {
     if (!_held.isCompleted) _held.complete();
   }
 
+  /// Sprite requests wait for this until [failSprites], and then fail.
+  Completer<void> _spritesHeld = Completer<void>()..complete();
+
+  /// Holds the requests of [spriteUrl] until [failSprites].
+  void holdSprites() => _spritesHeld = Completer<void>();
+
+  /// Answers the held sprite requests, and every later one, with 404.
+  void failSprites() {
+    if (!_spritesHeld.isCompleted) _spritesHeld.complete();
+  }
+
+  /// The sprite requests that [failSprites] answered.
+  int get failedSpriteRequests => _failedSpriteRequests;
+  var _failedSpriteRequests = 0;
+
+  /// The URL of a sprite that the fixture never has, whose requests wait
+  /// for [failSprites]. Its failure is a resource's, not the style's.
+  String get spriteUrl {
+    if (!kIsWeb) return '$_origin/sprite';
+    addNotFoundProtocol('fixture-sprite', (_) async {
+      await _spritesHeld.future;
+      _failedSpriteRequests++;
+    });
+    return 'fixture-sprite://sprite';
+  }
+
   var _demRequests = 0;
 
   /// The requests for the DEM tile.
@@ -127,6 +153,10 @@ class _Fixture {
       _demRequests++;
       response.headers.contentType = ContentType('image', 'png');
       response.add(_dem!);
+    } else if (path.startsWith('/sprite')) {
+      await _spritesHeld.future;
+      _failedSpriteRequests++;
+      response.statusCode = HttpStatus.notFound;
     } else if (RegExp(r'^/style/(\d+)\.json$').firstMatch(path)
         case final match?) {
       await _held.future;
@@ -156,7 +186,9 @@ void runTests() {
       fixture = await _Fixture.start();
     });
     tearDown(() async {
-      fixture.releaseStyles();
+      fixture
+        ..releaseStyles()
+        ..failSprites();
       await fixture.close();
     });
 
@@ -344,6 +376,45 @@ void runTests() {
       await map.pumpFuture(applying, reason: 'setTerrain never completed');
       await tester.pump();
       expect(map.style.terrain, _terrain);
+    });
+
+    testWidgets('a sprite that fails while a style loads holds setTerrain', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      // A style whose sprite is still on its way when the next style is set.
+      fixture.holdSprites();
+      var since = map.styleLoads;
+      await map.setOptions(
+        _options(
+          MapStyle.json(
+            jsonEncode({...fixture.style(), 'sprite': fixture.spriteUrl}),
+          ),
+        ),
+      );
+      await map.waitForStyleLoad(since: since);
+      fixture.holdStyles();
+      since = map.styleLoads;
+      await map.setOptions(
+        _options(
+          fixture.styleUrl(fixture.style(color: '#bbddff', demId: 'dem-new')),
+        ),
+      );
+      // The old style's sprite fails while the new style loads.
+      fixture.failSprites();
+      await map.pumpUntil(
+        () => fixture.failedSpriteRequests > 0,
+        reason: () => 'the sprite was never requested',
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      // Only the new style has the source of the terrain.
+      const terrain = Terrain(sourceId: 'dem-new', exaggeration: 1.25);
+      final applied = map.style.setTerrain(terrain);
+      fixture.releaseStyles();
+      await map.waitForStyleLoad(since: since);
+      await map.pumpFuture(applied, reason: 'setTerrain never completed');
+      await tester.pump();
+      expect(map.style.terrain, terrain);
     });
 
     testWidgets('reads the terrain of a style document', (tester) async {

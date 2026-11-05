@@ -37,3 +37,36 @@ void addJsonProtocol(
     }).toJS,
   );
 }
+
+/// Fails maplibre-gl-js requests for `<scheme>://…` URLs once [until]
+/// completes, with the error that gl-js gives a request that a server
+/// answered with 404 Not Found: an `AJAXError` that names the URL.
+void addNotFoundProtocol(
+  String scheme,
+  Future<void> Function(String url) until,
+) {
+  final maplibre = globalContext.getProperty<JSObject>('maplibregl'.toJS);
+  final ajaxError = maplibre.getProperty<JSFunction>('AJAXError'.toJS);
+  final blob = globalContext.getProperty<JSFunction>('Blob'.toJS);
+  final promise = globalContext.getProperty<JSFunction>('Promise'.toJS);
+  maplibre.callMethod<JSAny?>(
+    'addProtocol'.toJS,
+    scheme.toJS,
+    ((JSObject request, JSAny? _) {
+      final url = request.getProperty<JSString>('url'.toJS).toDart;
+      return promise.callAsConstructor<JSObject>(
+        ((JSFunction resolve, JSFunction reject) {
+          until(url).then((_) {
+            final error = ajaxError.callAsConstructor<JSObject>(
+              404.toJS,
+              'Not Found'.toJS,
+              url.toJS,
+              blob.callAsConstructor<JSObject>(JSArray<JSAny?>()),
+            );
+            reject.callAsFunction(null, error);
+          });
+        }).toJS,
+      );
+    }).toJS,
+  );
+}
