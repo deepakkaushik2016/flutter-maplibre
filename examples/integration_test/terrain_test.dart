@@ -417,6 +417,46 @@ void runTests() {
       expect(map.style.terrain, terrain);
     });
 
+    testWidgets('a replaced style rejects setTerrain, during a load too', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      final replaced = map.style;
+      var since = map.styleLoads;
+      await map.setOptions(
+        _options(MapStyle.json(jsonEncode(fixture.style(color: '#bbddff')))),
+      );
+      await map.waitForStyleLoad(since: since);
+      final isReplaced = isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('replaced'),
+      );
+      Future<Object?> errorOf(Future<void> call) async {
+        Object? error;
+        await map.pumpFuture(
+          call.catchError((Object e) => error = e),
+          reason: 'setTerrain on a replaced style waited',
+          timeout: const Duration(seconds: 2),
+        );
+        return error;
+      }
+
+      // With no style loading.
+      expect(await errorOf(replaced.setTerrain(_terrain)), isReplaced);
+      // While a style loads.
+      fixture.holdStyles();
+      since = map.styleLoads;
+      await map.setOptions(
+        _options(fixture.styleUrl(fixture.style(color: '#ffddbb'))),
+      );
+      expect(await errorOf(replaced.setTerrain(_terrain)), isReplaced);
+      fixture.releaseStyles();
+      await map.waitForStyleLoad(since: since);
+      await tester.pump();
+      expect(map.style.terrain, isNull);
+    });
+
     testWidgets('reads the terrain of a style document', (tester) async {
       for (final (json, terrain) in [
         (

@@ -403,15 +403,15 @@ class StyleControllerNative extends StyleController implements StyleBackend {
 
   @override
   Future<void> setTerrain(Terrain? terrain) async {
+    // Before the deferral, so a replaced style fails alike during a load.
+    _checkCurrent();
     if (_deferredTerrain.defer(terrain) case final applied?) return applied;
     await applyTerrain(terrain);
   }
 
   /// Sets [terrain] on the map now. JSON null removes the terrain.
   Future<void> applyTerrain(Terrain? terrain) async {
-    if (_disposed) {
-      throw StateError('The style was replaced; use the current style.');
-    }
+    _checkCurrent();
     // The C API takes a terrain on a source the style lacks or on one that
     // has no heights, both of which web rejects. The source cache answers
     // without a call to the map.
@@ -433,6 +433,14 @@ class StyleControllerNative extends StyleController implements StyleBackend {
     }
     await _map.setStyleTerrainJson(terrain?.toJson());
     _terrain = terrain;
+  }
+
+  /// Throws once a newer style replaced this one, whether or not a style
+  /// loads: a replaced style takes no terrain.
+  void _checkCurrent() {
+    if (_disposed) {
+      throw StateError('The style was replaced; use the current style.');
+    }
   }
 
   @override

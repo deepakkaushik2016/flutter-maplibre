@@ -379,15 +379,15 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
 
   @override
   Future<void> setTerrain(Terrain? terrain) async {
+    // Before the deferral, so a replaced style fails alike during a load.
+    _checkCurrent();
     if (_deferredTerrain.defer(terrain) case final applied?) return applied;
     applyTerrain(terrain);
   }
 
   /// Sets [terrain] on the map now, which must have loaded its style.
   void applyTerrain(Terrain? terrain) {
-    if (_disposed) {
-      throw StateError('The style was replaced; use the current style.');
-    }
+    _checkCurrent();
     // MapLibre GL JS throws an error that doesn't say which source is
     // missing in its message, and takes a source without heights, so both
     // are checked first, with the same errors as on native.
@@ -408,6 +408,14 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
       }
     }
     _throwErrorEvents(() => _map.setTerrain(terrain?.toJson().jsify()));
+  }
+
+  /// Throws once a newer style replaced this one, whether or not a style
+  /// loads: a replaced style takes no terrain.
+  void _checkCurrent() {
+    if (_disposed) {
+      throw StateError('The style was replaced; use the current style.');
+    }
   }
 
   @override

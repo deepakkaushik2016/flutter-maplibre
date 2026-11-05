@@ -276,6 +276,10 @@ abstract class StyleController {
   /// checked against that style, and fails if it fails to load or the map is
   /// disposed first. Only the last terrain set during a load is applied; the
   /// futures of the earlier calls complete with its result.
+  ///
+  /// Once a newer style was handed out, this style takes no terrain: the
+  /// future fails with a [StateError] at once, also while yet another style
+  /// loads. Set the terrain on the current style instead.
   Future<void> setTerrain(Terrain? terrain);
 
   /// The 3D terrain of the style, or null if it has none.
