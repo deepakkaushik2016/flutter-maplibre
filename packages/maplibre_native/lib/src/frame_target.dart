@@ -63,6 +63,11 @@ abstract base class FrameTarget {
 
   /// Whether the target takes frames now. A target can stop taking them for
   /// a while, as Android does while the app is in the background.
+  ///
+  /// While it is false, the renderer demands no frame and doesn't retry one
+  /// that found the target not ready. A target that turns it back to true
+  /// must call [FrameTargetHost.demandFrame] then, or the map stays on its
+  /// last frame until something else demands one.
   bool get acceptsFrames => true;
 
   /// Attaches a render session of [map] to this target. Frames wake through
