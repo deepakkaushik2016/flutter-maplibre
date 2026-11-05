@@ -624,6 +624,107 @@ void runTests() {
       );
     });
 
+    testWidgets('setGlobalState takes lists and maps', (tester) async {
+      Map<String, Object?> point(String kind, String value) => {
+        'type': 'Feature',
+        'properties': {'kind': kind, 'value': value},
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [0, 0],
+        },
+      };
+      // The second item of the list, and the "key" of the map.
+      final read = <String, Object>{
+        'list': [
+          'at',
+          1,
+          [
+            'array',
+            ['global-state', 'list'],
+          ],
+        ],
+        'map': [
+          'get',
+          'key',
+          [
+            'object',
+            ['global-state', 'map'],
+          ],
+        ],
+      };
+      final map = await pumpMap(
+        tester,
+        options: _options(
+          MapStyle.json(
+            jsonEncode({
+              'version': 8,
+              'state': {
+                'list': {
+                  'default': ['x', 'x'],
+                },
+                'map': {
+                  'default': {'key': 'x'},
+                },
+              },
+              'sources': {
+                'points': {
+                  'type': 'geojson',
+                  'data': {
+                    'type': 'FeatureCollection',
+                    'features': [
+                      for (final kind in read.keys) ...[
+                        point(kind, 'x'),
+                        point(kind, 'b'),
+                      ],
+                    ],
+                  },
+                },
+              },
+              'layers': [
+                for (final MapEntry(key: kind, :value) in read.entries)
+                  {
+                    'id': kind,
+                    'type': 'circle',
+                    'source': 'points',
+                    'filter': [
+                      'all',
+                      [
+                        '==',
+                        ['get', 'kind'],
+                        kind,
+                      ],
+                      [
+                        '==',
+                        ['get', 'value'],
+                        value,
+                      ],
+                    ],
+                    'paint': {'circle-radius': 10},
+                  },
+              ],
+            }),
+          ),
+        ),
+      );
+      Future<void> shows(String kind, String value) => map.waitForFeatures(
+        map.center,
+        (features) =>
+            features.length == 1 &&
+            features.single.properties['value'] == value,
+        layerIds: [kind],
+      );
+
+      await shows('list', 'x');
+      await map.style.setGlobalState('list', ['a', 'b', 'c']);
+      await shows('list', 'b');
+      await shows('map', 'x');
+      await map.style.setGlobalState('map', {'key': 'b', 'other': 1});
+      await shows('map', 'b');
+      // null resets them to the style's defaults.
+      await map.style.setGlobalState('list', null);
+      await shows('list', 'x');
+    });
+
     testWidgets('setGlobalState drives global-state expressions', (
       tester,
     ) async {
