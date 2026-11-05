@@ -753,6 +753,16 @@ Each entry: the decision, then why.
   network entitlement, Swift Package Manager), so a second app would only
   duplicate them. The packages have no example apps. `all_test.dart` runs
   the suite in one launch, as each launch builds and starts the app.
+- **The example app depends on `maplibre_native` directly, as a dev
+  dependency, for `darwin_texture_test.dart` only, which imports
+  `package:maplibre_native/src/darwin/darwin_plugin.dart`.** The test drives
+  the iOS and macOS plugin's C API with Metal events it signals itself, the
+  only way to make a frame's GPU work end late, in another order, or never;
+  no map call can. A public or `@visibleForTesting` export would put the
+  plugin's raw texture API on pub.dev for apps to depend on, a larger
+  commitment than one test's `src/` import in an app that is never
+  published. The app gets the package through `maplibre` anyway, and the
+  workspace pins both to one version.
 - **Unit tests cover what needs no platform** (models, annotation layers,
   the UI widgets against a mocked `MapController`, the gesture recognizer).
   Integration tests cover what each platform implements: rendering,

@@ -11,7 +11,8 @@ import 'test_map.dart';
 
 export 'alps_dem.dart';
 
-/// The exaggeration of the terrain in the terrain camera tests, the app's.
+/// The exaggeration of the terrain in the terrain camera tests, as a trail
+/// app might draw it.
 const alpsExaggeration = 1.25;
 
 /// The camera of the terrain camera tests: on the crest of the synthetic
