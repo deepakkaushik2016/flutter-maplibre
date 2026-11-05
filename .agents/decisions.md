@@ -756,9 +756,10 @@ Each entry: the decision, then why.
 - **Android profile builds allow cleartext to the loopback addresses**, as
   debug builds do, so the tests' loopback fixture servers reach the map in
   the profile builds that measure performance.
-- **The terrain soak test runs alone, in a profile build on a device**
-  (`terrain_soak_test.dart`, not in `all_test.dart`): it lasts 10 minutes,
-  and debug builds say nothing about frame times.
+- **The terrain soak and performance tests run alone, in profile builds
+  on devices** (`terrain_soak_test.dart`, `terrain_perf_test.dart`, not in
+  `all_test.dart`): the soak lasts 10 minutes, and debug builds say nothing
+  about frame times.
 - **A map's frame time is measured on screen, not from Flutter's frames
   alone.** The engine renders on its own thread at its own rate, and Flutter
   shows its newest frame in the next Flutter frame, so Flutter can draw

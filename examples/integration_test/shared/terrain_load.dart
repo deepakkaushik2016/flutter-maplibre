@@ -108,6 +108,28 @@ Future<void> flyOverRidge(
   }
 }
 
+/// Zooms [controller] in and out over [trailCenter], looking north along
+/// the trail at pitch 60, until [stop] completes, so the map renders
+/// every frame while the whole trail and its ground stay in view.
+Future<void> zoomOverTrail(
+  MapController controller, {
+  required Future<void> stop,
+}) async {
+  var stopped = false;
+  unawaited(stop.whenComplete(() => stopped = true));
+  for (var i = 0; !stopped; i++) {
+    await controller.animateCamera(
+      CameraUpdate.position(
+        center: trailCenter,
+        zoom: i.isEven ? 12.8 : 13.2,
+        bearing: 0,
+        pitch: 60,
+      ),
+      animation: const CameraAnimation.fly(),
+    );
+  }
+}
+
 /// Records how often the map's image changes on screen, and Flutter's own
 /// frame timings, while [recording].
 ///
