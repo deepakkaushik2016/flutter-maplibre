@@ -93,7 +93,14 @@ sealed class MapEventUserInput extends MapEvent {
   /// Creates a [MapEventUserInput].
   const MapEventUserInput({required this.point, required this.screenPoint});
 
-  /// The location that the user tapped, clicked or dragged.
+  /// The location that the user tapped, clicked or dragged, as
+  /// [MapController.toLngLat] finds it.
+  ///
+  /// Over a terrain, on native this is at sea level, not on the ground the
+  /// map draws there: over high ground it can be kilometres off. For the
+  /// tapped ground, call
+  /// `MapController.toLngLatOnTerrain(event.screenPoint)`. On web it follows
+  /// the terrain.
   final Geographic point;
 
   /// Where the user tapped, clicked or dragged, in logical pixels of the map.

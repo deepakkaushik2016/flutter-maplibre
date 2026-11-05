@@ -27,18 +27,30 @@ abstract interface class MapController {
 
   /// Convert a latitude/longitude coordinate to a screen location in logical
   /// pixels.
+  ///
+  /// It answers at once, from the projection of the frame on screen. Over a
+  /// terrain, on native it resolves at sea level, not on the ground the map
+  /// draws: over high ground it can be kilometres off. Use
+  /// [toScreenLocationOnTerrain] for the ground. On web it follows the terrain.
   Offset toScreenLocation(Geographic lngLat);
 
   /// Get the latitude/longitude coordinate for a screen location in logical
   /// pixels.
+  ///
+  /// It answers at once, from the projection of the frame on screen. Over a
+  /// terrain, on native it resolves at sea level, not on the ground the map
+  /// draws: over high ground it can be kilometres off. Use
+  /// [toLngLatOnTerrain] for the ground. On web it follows the terrain.
   Geographic toLngLat(Offset screenLocation);
 
   /// Convert a latitude/longitude coordinate to a screen location in logical
-  /// pixels.
+  /// pixels. Over a terrain, on native these are at sea level, as with
+  /// [toScreenLocation].
   List<Offset> toScreenLocations(List<Geographic> lngLats);
 
   /// Get the latitude/longitude coordinate for a screen location in logical
-  /// pixels.
+  /// pixels. Over a terrain, on native these are at sea level, as with
+  /// [toLngLat].
   List<Geographic> toLngLats(List<Offset> screenLocations);
 
   /// Finds the ground that the map draws at [screenLocation], in logical
