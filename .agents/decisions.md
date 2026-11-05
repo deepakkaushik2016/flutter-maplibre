@@ -467,10 +467,41 @@ Each entry: the decision, then why.
   call completes with the result of the last terrain's apply. A failed load
   (native `mapLoadingFailed`, which reports only the style document, or a
   rejected `setStyle*` command; web: an error event of no source or tile
-  while a style loads) and disposing the map fail the waiting calls, so none
-  hangs. On web, a JSON style that gl-js diffs without changes or rejects on
-  validation keeps the loaded style and fires no `style.load`; `_setStyle`
-  sees the unchanged `map.style` and ends the wait at once.
+  while a style loads, see below) and disposing the map fail the waiting
+  calls, so none hangs. On web, a JSON style that gl-js diffs without
+  changes or rejects on validation keeps the loaded style and fires no
+  `style.load`; `_setStyle` sees the unchanged `map.style` and ends the
+  wait at once.
+- **Native gives a style load's end to the load that started last, not to
+  the latest requested style.** MapLibre Native runs a map's commands in
+  order; `loadJSON` and `loadURL` report `mapLoadingStarted` before anything
+  else of the load (the style file source always exists, so `loadURL`'s
+  no-file-source failure, the one end without a start, never happens), and
+  a newer load cancels the older one's request. `_setStyle` queues each
+  load's generation as it makes the call, the start event takes the next
+  one, and the loaded and failed events use it. Taking the latest
+  generation instead let a load that ended before Dart set a newer style
+  flush the newer style's terrain onto the old one. A load whose style a
+  newer request replaced is not handed out, as gl-js fires no `style.load`
+  for it on web. A call that the C API rejects (any status but
+  `nativeError`, which a style that fails to parse returns after its start)
+  leaves the queue: its rejection completes as a microtask, before any
+  event can arrive.
+- **On web, only an error of the style itself ends a style load.** gl-js
+  fires sourceless errors for the style document (its request, JSON parse
+  and validation, after which no `style.load` comes) but also for sprites,
+  images, and app calls such as `addImage` with a taken ID, which leave the
+  load running. A failed request is an `AJAXError` that names its URL, so a
+  sourceless error whose URL isn't the requested style's is a resource's and
+  is ignored. An error without a URL still ends the load: taking a real
+  failure for a resource's would hold `setTerrain` forever, while the other
+  mistake (a sprite with a malformed URL, an undecodable image, a failed app
+  call during a swap) applies the terrain early, to the old style.
+- **A replaced style controller rejects `setTerrain` at any time.** Both
+  platforms check that the controller is current before deferring, so the
+  same stale call fails with the same `StateError` whether or not another
+  style is loading; the current controller's call during a load waits for
+  the loading style.
 - **Native keeps the terrain of the style in the controller.** The C getter
   is asynchronous and `StyleController.terrain` is not, so the controller
   takes it from the loaded style JSON it already reads on load and from each
