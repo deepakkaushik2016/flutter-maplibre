@@ -574,30 +574,23 @@ Each entry: the decision, then why.
   keeps it there for the gesture; a pinch scales and turns about where its
   focal point was, then pans that ground to the anchor, in the same delta.
   A pan without the anchor would move the plane at the center's height,
-  which ground above or below it slides off. `gestureStart` (and, until it
-  is one delta, `zoomBy`) still calls `anchorCenterOnTerrain` once when the
-  style has a terrain, so the steps before the grab's height arrives move
-  the center's ground. Measured over the synthetic ridge (zoom 13, pitch 60,
+  which ground above or below it slides off. `gestureStart` still calls
+  `anchorCenterOnTerrain` once when the style has a terrain, so the steps
+  before the grab's height arrives move the center's ground. Measured over the synthetic ridge (zoom 13, pitch 60,
   ×1.25), 40 moves of 5 px: grabs off the center's height ended 15.8 and
   86.1 px off without the anchor, at most 0.04 px with it (iOS simulator
   and Android emulator); a moving, twisting pinch 0.08–0.37 px. No call is
   added: the anchor is two doubles in the step's delta, and a drag of 40
   moves makes 43 calls (anchor, begin, 40 steps, end).
-- **Native `zoomBy` over a terrain runs as a gesture with the clamp off.**
-  MapLibre Native treats an animated or immediate scale delta as a camera
-  change of the app: it eases the center's height to the ground of the new
-  center and then jumps the center onto it, which moved a double tap's
-  ground 23 px. With the clamp off and the gesture phase begun, the center
-  keeps its height, which keeps the whole line of sight through the zoom's
-  anchor in place (0.3–0.5 px). The animation's end handler turns the clamp
-  back on while the gesture still runs, so the gesture's end puts the
-  center on the ground keeping the view. Five calls per zoom (anchor, clamp
-  off, zoom, clamp on, end) instead of one, none per frame. A later
-  `zoomBy` takes the hold over; a user gesture running at the end ends it
-  itself. With the clamp off, `zoomBy` only adds the anchor; without a
-  terrain it is unchanged. This hold is a temporary workaround: engine
-  Task 15 fixes zooming under the clamp at the root, and `zoomBy` then only
-  anchors.
+- **Native `zoomBy` is one anchored camera delta**, animated or not, over a
+  terrain too. MapLibre Native keeps the ground under the anchor in place
+  while the clamp moves the center onto the ground, so a double tap, two
+  overlapping double taps and five wheel notches keep the zoomed-in-on
+  ground within 0.02 px, with the center within 0.8 px of its ground. One
+  call per zoom, none per frame. An earlier version turned the clamp off
+  and ran the zoom as a gesture (five calls); the engine fixed the cause.
+  Over relief, the clamp's move of the center's height costs the zoom a
+  little: five 0.2-level notches on the ridge's slope end 0.96 levels in.
 - **Web leaves the terrain camera to gl-js.** gl-js clamps the center by
   default (`centerClampedToGround` is passed to the `Map`), and its
   projection follows the terrain, so the web sink is unchanged.
@@ -814,10 +807,6 @@ Each entry: the decision, then why.
   feature queries). gl-js projects onto the terrain. So on native a widget
   placed with `toScreenLocation` over high ground sits off the ground it
   marks, and `MapEventClick.point` is the sea-level point.
-- After a zoom over a slope, MapLibre Native's anchor at a gesture's end
-  sometimes leaves the center off the ground it looks at (2 of 12 runs
-  7.6 px off on the Android emulator, once not anchored at all). The
-  zoomed-in-on ground stays in place; the next gesture anchors again.
 - On web, gl-js's terrain camera moves the grabbed ground during gestures:
   22 px for a 200 px drag over the synthetic ridge and 53 px for a double
   tap. That is gl-js's own behaviour; the web sink is unchanged, and the
