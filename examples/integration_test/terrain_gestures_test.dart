@@ -319,10 +319,16 @@ void runTests() {
       final point = ground.groundAt(tapped);
       final zoom = map.controller.getCamera().zoom;
       await doubleTap(tester, map, tapped);
-      await map.waitForCamera((camera) => camera.zoom > zoom + 0.99);
+      // Over the slope the clamp, moving the center's height while the
+      // tapped ground stays, ends the zoom a few hundredths short of a level.
+      await map.waitForCamera((camera) => camera.zoom > zoom + 0.9);
       await fixture.waitUntilSettled(map, ground);
       final moved = await drift(map, ground, point, tapped);
-      debugPrint('double tap drift: ${moved.toStringAsFixed(2)} px');
+      debugPrint(
+        'double tap drift: ${moved.toStringAsFixed(2)} px, '
+        '${(map.controller.getCamera().zoom - zoom).toStringAsFixed(3)} '
+        'levels',
+      );
       expect(moved, lessThanOrEqualTo(_tolerance));
       expectCenterOnGround(map, ground);
     }, skip: kIsWeb);
