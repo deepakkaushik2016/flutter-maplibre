@@ -292,6 +292,9 @@ void runTests() {
         '${camera.bearing.toStringAsFixed(1)}',
       );
       expect(camera.zoom, greaterThan(13.5));
+      // The fingers' line turns counterclockwise, which raises the bearing:
+      // 48.2° on every platform.
+      expect(camera.bearing, closeTo(48, 3));
       expect(held, lessThanOrEqualTo(_tolerance));
       expect(released, lessThanOrEqualTo(_tolerance));
       expectCenterOnGround(map, ground);

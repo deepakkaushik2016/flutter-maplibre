@@ -251,6 +251,36 @@ void main() {
       expect(steps.every((u) => u.around == u.panTo), isTrue);
     });
 
+    testWidgets('a twisting pinch turns the map with the fingers', (
+      tester,
+    ) async {
+      await pumpMap(tester);
+      final a = await tester.startGesture(_center - const Offset(50, 0));
+      final b = await tester.startGesture(_center + const Offset(50, 0));
+      // Spread past the scale slop, then the left finger moves down and
+      // the right one up: the line between them, 150 px long, turns
+      // atan(100 / 150) = 33.7° counterclockwise on screen.
+      await a.moveBy(const Offset(-25, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+      await b.moveBy(const Offset(25, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+      for (var i = 0; i < 10; i++) {
+        await a.moveBy(const Offset(0, 5));
+        await tester.pump(const Duration(milliseconds: 16));
+        await b.moveBy(const Offset(0, -5));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await a.up();
+      await b.up();
+      await tester.pumpAndSettle();
+      // A counterclockwise twist turns the map counterclockwise, which
+      // raises the bearing, about the focal point.
+      expect(camera.rotated, closeTo(33.7, 1));
+      final steps = camera.updates.where((u) => u.rotateBy != 0);
+      expect(steps, isNotEmpty);
+      expect(steps.every((u) => u.around == u.panTo), isTrue);
+    });
+
     testWidgets('scroll wheel zooms the map', (tester) async {
       await pumpMap(tester);
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
