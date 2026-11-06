@@ -391,17 +391,22 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
   /// the map is replacing it.
   void _run(StyleController style, Future<void> call) {
     unawaited(
-      call.catchError((Object error, StackTrace stackTrace) {
-        if (!mounted || !identical(_style, style) || _replacing(style)) return;
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stackTrace,
-            library: 'maplibre',
-            context: ErrorDescription('while showing the user location'),
-          ),
-        );
-      }),
+      call.catchError(
+        (Object error, StackTrace stackTrace) =>
+            _report(style, error, stackTrace),
+      ),
+    );
+  }
+
+  void _report(StyleController style, Object error, StackTrace stackTrace) {
+    if (!mounted || !identical(_style, style) || _replacing(style)) return;
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'maplibre',
+        context: ErrorDescription('while showing the user location'),
+      ),
     );
   }
 
@@ -471,12 +476,19 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
   /// Moves the cone and the dot back on top of layers that the app added
   /// since, unless [UserLocationLayer.belowLayerId] places them.
   void _keepOnTop(StyleController style, String id) {
-    if (_requestedBelow(style) != null) return;
+    // A style on its way out has no order worth keeping.
+    if (_requestedBelow(style) != null || _replacing(style)) return;
     final layers = style.layers;
     // One walk of the layer list; moves only when another layer is on top.
     if (layers.isEmpty || layers.last.id == '$id-dot') return;
-    if (layers['$id-heading'] != null) layers.move('$id-heading');
-    if (layers['$id-dot'] != null) layers.move('$id-dot');
+    try {
+      if (layers['$id-heading'] != null) layers.move('$id-heading');
+      if (layers['$id-dot'] != null) layers.move('$id-dot');
+    } on Object catch (error, stackTrace) {
+      // A move that the map rejects leaves the collection in the map's
+      // order; the next update tries again.
+      _report(style, error, stackTrace);
+    }
   }
 
   GeoJsonData _data() {

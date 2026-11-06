@@ -430,8 +430,10 @@ Each entry: the decision, then why.
   here" over labels (ruling R37, over the brief's "below labels"). Each
   source update moves the cone and dot back on top of layers the app added
   since: one walk of the layer list, a move only when another layer is on
-  top. `belowLayerId` puts all three below that layer instead, and then
-  they stay where the app put them. The layers come back on every style:
+  top; not while the map replaces the style, and a move the map rejects
+  is reported like any other failed call and leaves the collection in the
+  map's order. `belowLayerId` puts all three below that layer instead,
+  and then they stay where the app put them. The layers come back on every style:
   the layer looks
   the controller up with `MapController.maybeOf(context, camera: false)`,
   an `InheritedModel` aspect that rebuilds it only when the map hands out a

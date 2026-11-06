@@ -48,6 +48,20 @@ class _Backend extends Mock implements StyleBackend {
   /// Holds each source update until it completes, when set.
   List<Completer<void>>? held;
 
+  /// Makes layer moves throw, as maplibre-gl-js does for a layer of a style
+  /// that it is replacing.
+  bool failMoves = false;
+
+  /// The layer order that the map took, by the moves it took.
+  final moves = <String>[];
+
+  @override
+  void moveLayer(String id, {String? belowLayerId}) {
+    if (failMoves) throw StateError('The map has no layer "$id".');
+    moves.add(id);
+    calls.add('moveLayer $id below $belowLayerId');
+  }
+
   @override
   Future<void> setGeoJsonData(String id, GeoJsonData data) async {
     if (failUpdates) throw StateError('source does not exist');
@@ -516,6 +530,49 @@ void main() {
         const UserLocation(position: Geographic(lon: 1, lat: 2)),
       );
       expect(tester.takeException(), isA<StateError>());
+    });
+
+    testWidgets('leaves the order alone while a new style loads', (
+      tester,
+    ) async {
+      await pump(tester);
+      await style.controller.sources.add(
+        const GeoJsonSource.data(id: 'trail', data: GeoJsonData.text('{}')),
+      );
+      await style.controller.layers.add(
+        LineStyleLayer(id: 'trail', sourceId: 'trail'),
+      );
+      final order = style.controller.layers.map((layer) => layer.id).toList();
+      // The app sets a new style; the map drops the old one's layers.
+      when(() => controller.options).thenReturn(_nextOptions);
+      style.backend.failMoves = true;
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2)),
+      );
+      expect(tester.takeException(), isNull);
+      expect(style.controller.layers.map((layer) => layer.id), order);
+    });
+
+    testWidgets('keeps the order of the map when it rejects a move', (
+      tester,
+    ) async {
+      await pump(tester);
+      await style.controller.sources.add(
+        const GeoJsonSource.data(id: 'trail', data: GeoJsonData.text('{}')),
+      );
+      await style.controller.layers.add(
+        LineStyleLayer(id: 'trail', sourceId: 'trail'),
+      );
+      final order = style.controller.layers.map((layer) => layer.id).toList();
+      style.backend.failMoves = true;
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2)),
+      );
+      // Reported, as the style stays, and the order is still the map's.
+      expect(tester.takeException(), isA<StateError>());
+      expect(style.controller.layers.map((layer) => layer.id), order);
     });
 
     testWidgets('sends one update at a time, then the latest', (tester) async {
