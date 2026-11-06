@@ -432,7 +432,19 @@ Each entry: the decision, then why.
   machinery is needed), not on every camera change as the overlay did. The
   source updates when the location moves, its accuracy changes or it
   turns by 1° or more, at most every 33.3 ms, with a trailing update for the
-  latest; tracking runs in Dart over `animateCamera` on the same changes. A
+  latest, and only once the map took the previous one, so a slow map gets
+  the latest location instead of a queue. A heading that is not a number
+  counts as unknown. Tracking runs in Dart over `animateCamera` on the same
+  changes, at most every 33.3 ms too.
+  While a new style loads, both platforms keep handing out the old style
+  controller: `setTerrain` on it is how an app sets the terrain of the
+  incoming style (`DeferredTerrain`), so `MapController.style` can't turn
+  null then without breaking that. The old style's sources are gone or
+  going, so the layer treats its calls as lost rather than failed while the
+  app's `MapOptions.style` differs from the one it attached under, or the
+  collection lost the source, and adds itself to the new style with the
+  latest location once it is handed out. A call that succeeds meanwhile
+  (gl-js keeps a style that a reload left unchanged) ends that. A
   translucent `Listener` stops the tracking on a drag or wheel. Permissions
   are left to `geolocator` or `permission_handler`; `maplibre_geolocator`
   adapts `geolocator` positions.

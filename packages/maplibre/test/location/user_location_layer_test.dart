@@ -20,6 +20,9 @@ const _camera = CameraPosition(
 );
 
 const String _source = UserLocationLayer.sourceId;
+
+const _options = MapOptions(style: MapStyle.json('{"version":8}'));
+const _nextOptions = MapOptions(style: MapStyle.json('{"version":8,"x":1}'));
 const String _heading = UserLocationLayer.headingLayerId;
 const String _dot = UserLocationLayer.dotLayerId;
 
@@ -31,6 +34,10 @@ class _Backend extends Mock implements StyleBackend {
   /// The GeoJSON of each source update, in order.
   final updates = <String>[];
 
+  /// Makes source updates fail, as the map does for a source of a style it
+  /// is replacing.
+  bool failUpdates = false;
+
   @override
   Future<void> addSource(Source source) async =>
       calls.add('addSource ${source.id}');
@@ -38,8 +45,19 @@ class _Backend extends Mock implements StyleBackend {
   @override
   Future<void> removeSource(String id) async => calls.add('removeSource $id');
 
+  /// Holds each source update until it completes, when set.
+  List<Completer<void>>? held;
+
   @override
   Future<void> setGeoJsonData(String id, GeoJsonData data) async {
+    if (failUpdates) throw StateError('source does not exist');
+    if (held case final held?) {
+      final done = Completer<void>();
+      held.add(done);
+      calls.add('setGeoJsonData $id');
+      updates.add(data.toText());
+      return done.future;
+    }
     calls.add('setGeoJsonData $id');
     updates.add(data.toText());
   }
@@ -124,6 +142,7 @@ void main() {
         ],
       );
       when(() => controller.style).thenReturn(style.controller);
+      when(() => controller.options).thenReturn(_options);
       when(
         () =>
             controller.animateCamera(any(), animation: any(named: 'animation')),
@@ -177,7 +196,7 @@ void main() {
         'addLayer ${UserLocationLayer.accuracyLayerId} below labels',
         'addLayer ${UserLocationLayer.dotLayerId} below labels',
         'addImage $_source-heading-1',
-        'addLayer ${UserLocationLayer.headingLayerId} below ${UserLocationLayer.dotLayerId}',
+        'addLayer $_heading below $_dot',
       ]);
       expect(style.controller.layers.map((layer) => layer.id), [
         'background',
@@ -396,6 +415,135 @@ void main() {
       expect(next.updates, 1);
     });
 
+    testWidgets('holds its updates while a new style loads', (tester) async {
+      await pump(tester);
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 5),
+      );
+      await tester.pump(UserLocationLayer.updateInterval);
+      // The app sets a new style. The map keeps handing out the old one
+      // until the new one has loaded, and drops the old one's sources.
+      when(() => controller.options).thenReturn(_nextOptions);
+      style.backend.failUpdates = true;
+      for (var i = 1; i <= 5; i++) {
+        await add(
+          tester,
+          UserLocation(
+            position: const Geographic(lon: 1, lat: 2),
+            heading: 5.0 + 10 * i,
+          ),
+        );
+        await tester.pump(UserLocationLayer.updateInterval);
+      }
+      // Its collections go just before the new style is handed out.
+      style.controller.sources.dispose();
+      style.controller.layers.dispose();
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 90),
+      );
+      await tester.pump(UserLocationLayer.updateInterval);
+      expect(tester.takeException(), isNull);
+      // The new style gets the latest location.
+      final next = _Style();
+      when(() => controller.style).thenReturn(next.controller);
+      await tester.pumpWidget(app());
+      await tester.pump();
+      final source = next.controller.sources[_source]! as GeoJsonSourceData;
+      expect(source.data.toText(), contains('"h":90'));
+      // And updates again.
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 120),
+      );
+      expect(next.updates, 1);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reports a failed update of a style that stays', (
+      tester,
+    ) async {
+      await pump(tester);
+      style.backend.failUpdates = true;
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2)),
+      );
+      expect(tester.takeException(), isA<StateError>());
+    });
+
+    testWidgets('sends one update at a time, then the latest', (tester) async {
+      await pump(tester);
+      final held = style.backend.held = [];
+      for (var i = 0; i < 10; i++) {
+        await add(
+          tester,
+          UserLocation(
+            position: const Geographic(lon: 1, lat: 2),
+            heading: i * 10.0,
+          ),
+        );
+        await tester.pump(UserLocationLayer.updateInterval);
+      }
+      // The map has not taken the first: nothing else goes out.
+      expect(style.updates, 1);
+      held.single.complete();
+      await tester.pump();
+      expect(style.updates, 2);
+      expect(style.backend.updates.last, contains('"h":90'));
+    });
+
+    testWidgets('takes a heading that is not a number as unknown', (
+      tester,
+    ) async {
+      await pump(tester);
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 10),
+      );
+      await tester.pump(UserLocationLayer.updateInterval);
+      await add(
+        tester,
+        const UserLocation(
+          position: Geographic(lon: 1, lat: 2),
+          heading: double.nan,
+        ),
+      );
+      expect(style.updates, 2);
+      expect(style.kinds, ['dot']);
+      await tester.pump(UserLocationLayer.updateInterval);
+      await add(
+        tester,
+        const UserLocation(
+          position: Geographic(lon: 1, lat: 2),
+          heading: double.nan,
+        ),
+      );
+      expect(style.updates, 2);
+    });
+
+    testWidgets('takes the cone image out when it goes while drawing it', (
+      tester,
+    ) async {
+      final drawn = Completer<void>();
+      when(
+        () => style.controller.addImageFromCanvas(
+          id: any(named: 'id'),
+          painter: any(named: 'painter'),
+          width: any(named: 'width'),
+          height: any(named: 'height'),
+        ),
+      ).thenAnswer((_) => drawn.future);
+      await tester.pumpWidget(app());
+      await tester.pumpWidget(app(layer: false));
+      style.calls.clear();
+      drawn.complete();
+      await tester.pump();
+      expect(style.calls, ['removeImage $_source-heading-1']);
+      expect(style.controller.layers[_heading], isNull);
+    });
+
     testWidgets('takes the next IDs when they are in use', (tester) async {
       await tester.pumpWidget(
         App(
@@ -488,6 +636,7 @@ void main() {
         tester,
         const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 90),
       );
+      await tester.pump(UserLocationLayer.updateInterval);
       await add(
         tester,
         const UserLocation(position: Geographic(lon: 3, lat: 4), heading: 90),
@@ -514,10 +663,12 @@ void main() {
         tester,
         const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 90),
       );
+      await tester.pump(UserLocationLayer.updateInterval);
       await add(
         tester,
         const UserLocation(position: Geographic(lon: 1, lat: 2), heading: 90.5),
       );
+      await tester.pump(UserLocationLayer.updateInterval);
       verify(
         () => controller.animateCamera(
           const CameraUpdate.position(
@@ -540,6 +691,32 @@ void main() {
           animation: any(named: 'animation'),
         ),
       ).called(1);
+    });
+
+    testWidgets('follows at most 30 times a second', (tester) async {
+      await pump(tester, tracking: UserLocationTracking.positionAndHeading);
+      for (var i = 0; i < 120; i++) {
+        locations.add(
+          UserLocation(
+            position: const Geographic(lon: 1, lat: 2),
+            heading: i * 2.0,
+          ),
+        );
+        await tester.pump(const Duration(microseconds: 8334));
+      }
+      await tester.pump(UserLocationLayer.updateInterval);
+      final moves =
+          verify(
+                () => controller.animateCamera(
+                  captureAny(),
+                  animation: any(named: 'animation'),
+                ),
+              ).captured
+              .map((update) => (update as CameraUpdatePosition).bearing)
+              .toList();
+      expect(moves.length, inInclusiveRange(29, 31));
+      // Ending on the latest heading.
+      expect(moves.last, 238);
     });
 
     testWidgets('moves to the last location when tracking starts', (

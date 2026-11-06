@@ -31,8 +31,9 @@
   dot and keeps its length on screen at every zoom, and a dot that faces the
   screen. Camera moves cost nothing in Dart; the source updates only when
   the location moves, its accuracy changes or it turns by 1° or more, at
-  most 30 times a second. `UserLocationStyle` sets the outline, the
-  accuracy circle and the cone.
+  most 30 times a second and one update at a time, also while a new style
+  loads. `UserLocationStyle` sets the outline, the accuracy circle and the
+  cone.
 - `MapController.maybeOf(context, camera: false)` looks up the controller
   without rebuilding the widget on every camera change, only when the map
   hands out a new style.

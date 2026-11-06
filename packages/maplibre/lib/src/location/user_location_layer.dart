@@ -31,8 +31,10 @@ import 'package:maplibre/src/location/user_location_geometry.dart';
 /// style has loaded, the layer adds them to it again.
 ///
 /// Each new location updates the source, but only if it moved, its
-/// accuracy changed or it turned by 1° or more, and at most 30 times a
-/// second; camera moves update nothing.
+/// accuracy changed or it turned by 1° or more, at most 30 times a second
+/// and one update at a time; camera moves update nothing. A heading that is
+/// not a number counts as unknown. While tracking, the camera follows at
+/// most 30 times a second too.
 ///
 /// The layer takes its locations from a stream, so it works the same on
 /// every platform and with any location source. It asks for no permission;
@@ -140,9 +142,26 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
   /// since the last one.
   Timer? _cooldown;
 
-  /// Whether a location arrived during [_cooldown] that the source should
-  /// show.
+  /// Whether a location arrived during [_cooldown] or [_updating] that the
+  /// source should show.
   var _pending = false;
+
+  /// Whether a source update is on its way to the map. The next waits for
+  /// it, so a slow map gets the latest location rather than a queue.
+  var _updating = false;
+
+  /// The style the app had set when the source was added. While the app's
+  /// style differs, the map is loading a new one: it still hands out
+  /// [_style] but drops its sources, so a failed call is not reported.
+  MapStyle? _mapStyle;
+
+  /// Runs while camera moves wait for [UserLocationLayer.updateInterval] to
+  /// pass since the last one.
+  Timer? _followCooldown;
+
+  /// Whether a location arrived during [_followCooldown] that the camera
+  /// should move to.
+  var _followPending = false;
 
   /// The image of the heading cone in [_style], or null.
   String? _coneImage;
@@ -193,6 +212,7 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
   @override
   void dispose() {
     unawaited(_subscription?.cancel());
+    _followCooldown?.cancel();
     _detach(removeFromStyle: true);
     super.dispose();
   }
@@ -202,7 +222,7 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
       if (!mounted) return;
       _location = location;
       if (_differs(_shown, location)) _requestUpdate();
-      if (_differs(_followed, location)) _follow();
+      if (_differs(_followed, location)) _requestFollow();
     });
   }
 
@@ -214,10 +234,17 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
         old.accuracy != location.accuracy) {
       return true;
     }
-    final (a, b) = (old.heading, location.heading);
+    final (a, b) = (_headingOf(old), _headingOf(location));
     if (a == null || b == null) return (a == null) != (b == null);
     return headingDifference(a, b) >= 1;
   }
+
+  /// The heading of [location], or null if it is unknown or not a number.
+  static double? _headingOf(UserLocation location) =>
+      switch (location.heading) {
+        final heading? when heading.isFinite => heading,
+        _ => null,
+      };
 
   // The source and layers in the style.
 
@@ -229,6 +256,7 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     }
     _sourceId = id;
     _shown = _location;
+    _mapStyle = _controller?.options.style;
     final data = _data();
     style.batch(() {
       _run(
@@ -276,10 +304,14 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     } on Object {
       return;
     }
-    final stale = !mounted || !identical(_style, style);
-    if (stale || image != '$id-heading-$_coneImages') {
-      // Replaced meanwhile.
-      if (!stale) _run(style, style.removeImage(image));
+    if (!mounted ||
+        !identical(_style, style) ||
+        image != '$id-heading-$_coneImages') {
+      // Replaced or gone meanwhile: take the image out of a style that the
+      // map still shows.
+      if (identical(_controller?.style, style)) {
+        unawaited(style.removeImage(image).catchError((Object _) {}));
+      }
       return;
     }
     final old = _coneImage;
@@ -302,6 +334,7 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     _cooldown?.cancel();
     _cooldown = null;
     _pending = false;
+    _updating = false;
     final style = _style;
     final id = _sourceId;
     final image = _coneImage;
@@ -343,11 +376,12 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     }
   }
 
-  /// Reports a failed style call, unless the style went away meanwhile.
+  /// Reports a failed style call, unless the style went away meanwhile or
+  /// the map is replacing it.
   void _run(StyleController style, Future<void> call) {
     unawaited(
       call.catchError((Object error, StackTrace stackTrace) {
-        if (!mounted || !identical(_style, style)) return;
+        if (!mounted || !identical(_style, style) || _replacing(style)) return;
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: error,
@@ -360,31 +394,65 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     );
   }
 
+  /// Whether the map is replacing [style] with a new one: the app set
+  /// another style, or the style dropped the source. Until the new style
+  /// has loaded, the map keeps handing out the old one, which takes a
+  /// terrain for the new one (see [StyleController.setTerrain]), and the
+  /// layer adds itself to the new one with the latest location then.
+  bool _replacing(StyleController style) {
+    final id = _sourceId;
+    return id == null ||
+        style.sources[id] == null ||
+        _controller?.options.style != _mapStyle;
+  }
+
   /// Updates the source now, or once [UserLocationLayer.updateInterval] has
-  /// passed since the last update.
+  /// passed since the last update and the map took it.
   void _requestUpdate() {
     if (_sourceId == null) return;
-    if (_cooldown != null) {
-      _pending = true;
-      return;
-    }
-    _update();
+    _pending = true;
+    _flush();
+  }
+
+  /// Sends the pending location, unless an update is too recent or on its
+  /// way.
+  void _flush() {
+    if (_cooldown != null || _updating || !_pending) return;
+    _pending = false;
+    final location = _location;
+    if (location != null && _differs(_shown, location)) _update();
   }
 
   void _update() {
     final style = _style;
     final id = _sourceId;
     if (style == null || id == null) return;
+    // A style that dropped the source is on its way out; the next one gets
+    // the latest location.
+    if (style.sources[id] == null) return;
     _shown = _location;
-    _run(style, style.sources.updateGeoJsonData(id, _data()));
+    _updating = true;
+    final call = style.sources.updateGeoJsonData(id, _data());
+    _run(style, call);
+    unawaited(
+      call
+          .then((_) {
+            // The style stayed after all, as for a style that maplibre-gl-js
+            // found unchanged.
+            if (identical(_style, style)) {
+              _mapStyle = _controller?.options.style;
+            }
+          }, onError: (Object _) {})
+          .whenComplete(() {
+            if (!identical(_style, style)) return;
+            _updating = false;
+            _flush();
+          }),
+    );
     _cooldown?.cancel();
     _cooldown = Timer(UserLocationLayer.updateInterval, () {
       _cooldown = null;
-      final location = _location;
-      if (_pending && location != null && _differs(_shown, location)) {
-        _update();
-      }
-      _pending = false;
+      _flush();
     });
   }
 
@@ -486,6 +554,24 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
 
   // Tracking
 
+  /// Moves the camera to the latest location now, or once
+  /// [UserLocationLayer.updateInterval] has passed since the last move.
+  void _requestFollow() {
+    if (_followCooldown != null) {
+      _followPending = true;
+      return;
+    }
+    _follow();
+    _followCooldown = Timer(UserLocationLayer.updateInterval, () {
+      _followCooldown = null;
+      final location = _location;
+      if (_followPending && location != null && _differs(_followed, location)) {
+        _requestFollow();
+      }
+      _followPending = false;
+    });
+  }
+
   /// Moves the camera to the latest location while tracking.
   void _follow() {
     final location = _location;
@@ -504,7 +590,7 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
           center: location.position,
           zoom: zoom,
           bearing: _tracking == UserLocationTracking.positionAndHeading
-              ? location.heading
+              ? _headingOf(location)
               : null,
         ),
         animation: CameraAnimation.fly(duration: widget.trackingDuration),
