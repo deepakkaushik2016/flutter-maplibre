@@ -13,10 +13,14 @@
 // --dart-define=TERRAIN_PERF_BASEMAP=<style URL> also draws that basemap
 // under the hillshade and the trail, as an app does, over Mapterhorn's DEM
 // unless TERRAIN_PERF_DEM names another.
+// --dart-define=TERRAIN_PERF_USER_LOCATION=true also shows a
+// UserLocationLayer that stays in view, with its accuracy and a heading
+// that turns, updated 30 times a second: the worst case of a compass.
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
@@ -35,6 +39,20 @@ const _networkDem = String.fromEnvironment('TERRAIN_PERF_DEM');
 const _basemap = String.fromEnvironment('TERRAIN_PERF_BASEMAP');
 
 const _mapterhorn = 'https://tiles.mapterhorn.com/tilejson.json';
+
+const _userLocation = bool.fromEnvironment('TERRAIN_PERF_USER_LOCATION');
+
+/// A location just ahead of the camera's center, so it stays in view
+/// during the flights, turning 3° every 33 ms.
+Stream<UserLocation> _locationsInView(MapController controller) =>
+    Stream.periodic(const Duration(microseconds: 33334), (tick) {
+      final center = controller.getCamera().center;
+      return UserLocation(
+        position: Geographic(lon: center.lon, lat: center.lat - 0.002),
+        accuracy: 30,
+        heading: tick * 3.0 % 360,
+      );
+    });
 
 /// [basemap] with the raster DEM source `alps` of [dem], and the hillshade
 /// and trail of [trailStyle] under its labels.
@@ -140,6 +158,16 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
           ),
           initCamera: alpsCamera,
         ),
+        children: [
+          if (_userLocation)
+            Builder(
+              builder: (context) => UserLocationLayer(
+                locations: _locationsInView(
+                  MapController.of(context, camera: false),
+                ),
+              ),
+            ),
+        ],
       );
       await map.style.setTerrain(
         const Terrain(sourceId: 'alps', exaggeration: exaggeration),
@@ -157,6 +185,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
             ? (_networkDem.isEmpty ? _mapterhorn : _networkDem)
             : 'fixture',
         'basemap': basemap != null ? _basemap : 'none',
+        'user_location': _userLocation,
       };
       // What the map got wrong, and the numbers that missed the gate.
       final failures = <String>[];
