@@ -9,13 +9,22 @@ import 'package:maplibre_platform_interface/src/widget/inherited_model.dart';
 abstract interface class MapController {
   /// Find the [MapController] of the closest [MapLibreMap] in the widget tree.
   /// Returns null if called outside of the [MapLibreMap.children].
-  static MapController? maybeOf(BuildContext context) =>
-      MapLibreInheritedModel.maybeMapControllerOf(context);
+  ///
+  /// The calling widget rebuilds whenever the map does, which is on every
+  /// camera change. With [camera] false it rebuilds only when the controller
+  /// or the [style] it hands out changes, such as when a new style has
+  /// loaded: for widgets that put their content into the style and leave
+  /// the camera to the map, such as `UserLocationLayer`.
+  static MapController? maybeOf(BuildContext context, {bool camera = true}) =>
+      camera
+      ? MapLibreInheritedModel.maybeMapControllerOf(context)
+      : MapLibreInheritedModel.maybeMapControllerOfStyle(context);
 
   /// Find the [MapController] of the closest [MapLibreMap] in the widget tree.
   /// Throws an [StateError] if called outside of the [MapLibreMap.children].
-  static MapController of(BuildContext context) =>
-      maybeOf(context) ??
+  /// See [maybeOf] for [camera].
+  static MapController of(BuildContext context, {bool camera = true}) =>
+      maybeOf(context, camera: camera) ??
       (throw StateError('Unable to find an instance of MapController'));
 
   /// Get the [MapOptions] from [MapLibreMap.options].

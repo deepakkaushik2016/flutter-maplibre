@@ -708,6 +708,8 @@ abstract class MapLibreMapState extends State<MapLibreMap>
             MapLibreInheritedModel(
               mapController: this,
               cameraPosition: camera,
+              // Read once the map exists, as the children are.
+              style: isInitialized ? style : null,
               child: isInitialized
                   ? Stack(children: widget.children)
                   : const SizedBox.shrink(),

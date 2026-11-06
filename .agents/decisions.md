@@ -383,6 +383,14 @@ Each entry: the decision, then why.
   tile that is not found (404) as empty, so only other failures reach the
   stream as errors.
 
+- **`MapController.maybeOf(context, camera: false)` depends on an
+  `InheritedModel` aspect of the controller and its style only.** The map
+  rebuilds `MapLibreInheritedModel` on every frame it shows, and every
+  plain dependent with it. A widget that puts its content into the style
+  needs the controller and to hear of a new style, not the camera; the
+  aspect makes its per-frame cost zero. Plain `maybeOf` keeps rebuilding
+  with the camera, as widgets rely on it.
+
 - **User location is a Flutter layer, `UserLocationLayer`, fed by a
   `Stream<UserLocation>`; there is no `PermissionManager`.** It paints in
   Dart, so it works the same on every platform, and tracking runs in Dart

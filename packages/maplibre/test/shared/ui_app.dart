@@ -7,12 +7,14 @@ class App extends StatelessWidget {
     required this.camera,
     required this.controller,
     this.children = const [],
+    this.style,
     super.key,
   });
 
   final List<Widget> children;
   final MapController controller;
   final CameraPosition? camera;
+  final StyleController? style;
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +24,7 @@ class App extends StatelessWidget {
         body: MapLibreInheritedModel(
           cameraPosition: camera,
           mapController: controller,
+          style: style,
           child: Stack(children: children),
         ),
       ),

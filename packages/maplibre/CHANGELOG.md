@@ -17,6 +17,9 @@
 
 ### Features
 
+- `MapController.maybeOf(context, camera: false)` looks up the controller
+  without rebuilding the widget on every camera change, only when the map
+  hands out a new style.
 - 3D terrain: `StyleController.setTerrain(Terrain(sourceId: …))` raises the
   map by a raster DEM source, `StyleController.terrain` reads it back, and
   `StyleController.setGlobalState` sets what `global-state` expressions read,

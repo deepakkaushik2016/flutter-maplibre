@@ -19,6 +19,12 @@ below. See also the
   `around` to mean that the step zooms or rotates must check `zoomBy` and
   `rotateBy` instead.
 
+### Features
+
+- `MapController.maybeOf` and `MapController.of` take `camera: false` to
+  look up the controller without rebuilding the widget on every camera
+  change, only when the map hands out a new style.
+
 ## 0.4.0-pre.2
 
 [Check the maplibre changelog](https://pub.dev/packages/maplibre/versions/0.4.0-pre.2/changelog#040-pre2)
