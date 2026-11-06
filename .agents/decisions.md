@@ -389,7 +389,10 @@ Each entry: the decision, then why.
   plain dependent with it. A widget that puts its content into the style
   needs the controller and to hear of a new style, not the camera; the
   aspect makes its per-frame cost zero. Plain `maybeOf` keeps rebuilding
-  with the camera, as widgets rely on it.
+  with the camera, as widgets rely on it. The plain lookups register a
+  camera aspect of their own, and only a dependent of the style aspect
+  alone skips a rebuild, so a widget that uses both lookups, in either
+  order, keeps rebuilding with the camera.
 
 - **User location is a `UserLocationLayer` in `MapLibreMap.children`, fed by
   a `Stream<UserLocation>`, that the map draws in its style; there is no

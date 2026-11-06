@@ -16,7 +16,11 @@ class MapLibreInheritedModel extends InheritedModel<Object> {
 
   /// The aspect of a dependent that rebuilds only when [mapController] or
   /// [style] changes, not with the camera.
-  static const Object styleAspect = _StyleAspect();
+  static const Object styleAspect = _Aspect('style');
+
+  /// The aspect of a dependent that rebuilds whenever the map does, with
+  /// the camera.
+  static const Object cameraAspect = _Aspect('camera');
 
   /// [MapController] instance.
   final MapController mapController;
@@ -31,7 +35,10 @@ class MapLibreInheritedModel extends InheritedModel<Object> {
   /// Get the [InheritedModel] that is used to inject models into the widget
   /// tree that can referenced further down in the widget tree.
   static MapLibreInheritedModel? maybeOf(BuildContext context) =>
-      InheritedModel.inheritFrom<MapLibreInheritedModel>(context);
+      InheritedModel.inheritFrom<MapLibreInheritedModel>(
+        context,
+        aspect: cameraAspect,
+      );
 
   /// Get the in the widget tree injected [MapController].
   /// Used in [MapController.maybeOf].
@@ -61,7 +68,8 @@ class MapLibreInheritedModel extends InheritedModel<Object> {
     covariant MapLibreInheritedModel oldWidget,
     Set<Object> dependencies,
   ) {
-    // A dependent without an aspect has an empty set and always rebuilds.
+    // Only a dependent of the style alone skips the camera: one that also
+    // looked up the camera, in any order, rebuilds with it.
     if (dependencies.length == 1 && dependencies.contains(styleAspect)) {
       return !identical(oldWidget.mapController, mapController) ||
           !identical(oldWidget.style, style);
@@ -70,6 +78,11 @@ class MapLibreInheritedModel extends InheritedModel<Object> {
   }
 }
 
-class _StyleAspect {
-  const _StyleAspect();
+class _Aspect {
+  const _Aspect(this.name);
+
+  final String name;
+
+  @override
+  String toString() => 'MapLibreInheritedModel.${name}Aspect';
 }

@@ -22,17 +22,38 @@ class _Dependent extends StatelessWidget {
   }
 }
 
+/// Looks up the controller without the camera and, elsewhere in its build,
+/// the camera.
+class _MixedDependent extends StatelessWidget {
+  const _MixedDependent({required this.builds, required this.cameraFirst});
+
+  final List<CameraPosition?> builds;
+  final bool cameraFirst;
+
+  @override
+  Widget build(BuildContext context) {
+    final camera = cameraFirst ? CameraPosition.maybeOf(context) : null;
+    MapController.maybeOf(context, camera: false);
+    builds.add(camera ?? CameraPosition.maybeOf(context));
+    return const SizedBox();
+  }
+}
+
 void main() {
   group('MapController.maybeOf', () {
     final controller = _Controller();
     final style = _Style();
     final withCamera = <MapController?>[];
     final withoutCamera = <MapController?>[];
+    final mixed = <CameraPosition?>[];
+    final mixedCameraFirst = <CameraPosition?>[];
     // The same widgets in every frame, as MapLibreMap.children are.
     final children = Column(
       children: [
         _Dependent(camera: true, builds: withCamera),
         _Dependent(camera: false, builds: withoutCamera),
+        _MixedDependent(builds: mixed, cameraFirst: false),
+        _MixedDependent(builds: mixedCameraFirst, cameraFirst: true),
       ],
     );
 
@@ -68,6 +89,18 @@ void main() {
       expect(withoutCamera, hasLength(2));
       await tester.pumpWidget(map(4, style));
       expect(withoutCamera, hasLength(2));
+    });
+
+    testWidgets('a widget that also reads the camera rebuilds with it', (
+      tester,
+    ) async {
+      mixed.clear();
+      mixedCameraFirst.clear();
+      await tester.pumpWidget(map(1, style));
+      await tester.pumpWidget(map(2, style));
+      await tester.pumpWidget(map(3, style));
+      expect(mixed.map((camera) => camera?.zoom), [1, 2, 3]);
+      expect(mixedCameraFirst.map((camera) => camera?.zoom), [1, 2, 3]);
     });
   });
 }
