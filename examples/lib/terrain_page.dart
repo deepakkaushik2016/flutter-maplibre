@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:maplibre/maplibre.dart';
+import 'package:maplibre_example/utils/simulated_locations.dart';
 
 /// 3D terrain from a raster DEM source, with its hillshade. Tap the map to
-/// read the ground and its height there.
+/// read the ground and its height there. A simulated walk shows the user
+/// location on the ground, with its heading.
 @immutable
 class TerrainPage extends StatefulWidget {
   const TerrainPage({super.key});
@@ -15,12 +17,18 @@ class TerrainPage extends StatefulWidget {
 
 const _demSourceId = 'terrain';
 
+const _center = Geographic(lon: 11.39085, lat: 47.27574);
+
 class _TerrainPageState extends State<TerrainPage> {
   MapController? _controller;
   StyleController? _style;
   double _exaggeration = 1.5;
   TerrainLoadMode _loadMode = .quality;
   String? _tapped;
+  final Stream<UserLocation> _walk = simulatedLocations(
+    center: _center,
+    radius: 400,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +39,7 @@ class _TerrainPageState extends State<TerrainPage> {
           MapLibreMap(
             options: const MapOptions(
               initCamera: CameraUpdate.position(
-                center: Geographic(lon: 11.39085, lat: 47.27574),
+                center: _center,
                 zoom: 12,
                 pitch: 60,
               ),
@@ -40,6 +48,7 @@ class _TerrainPageState extends State<TerrainPage> {
             onMapCreated: (controller) => _controller = controller,
             onStyleLoaded: _onStyleLoaded,
             onClick: (event) => _onTap(event.screenPoint),
+            children: [UserLocationLayer(locations: _walk)],
           ),
           Positioned(
             left: 8,

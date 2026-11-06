@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre/maplibre.dart';
 import 'package:maplibre_example/utils/map_styles.dart';
+import 'package:maplibre_example/utils/simulated_locations.dart';
 import 'package:maplibre_geolocator/maplibre_geolocator.dart';
 
 @immutable
@@ -17,8 +18,13 @@ class UserLocationPage extends StatefulWidget {
 }
 
 class _UserLocationPageState extends State<UserLocationPage> {
-  /// The user locations, once the location permission was granted.
+  /// The user locations, once the location permission was granted, or a
+  /// simulated walk.
   Stream<UserLocation>? _locations;
+
+  /// Whether [_locations] is a simulated walk, for devices without a
+  /// location source, such as simulators and emulators.
+  var _simulated = false;
   UserLocationTracking _tracking = UserLocationTracking.position;
 
   @override
@@ -45,8 +51,10 @@ class _UserLocationPageState extends State<UserLocationPage> {
     }
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error Showing a simulated walk.')),
+      );
+      _simulate();
       return;
     }
     setState(
@@ -58,11 +66,25 @@ class _UserLocationPageState extends State<UserLocationPage> {
     );
   }
 
+  /// Shows a walk around Innsbruck instead of the device's location.
+  void _simulate() => setState(() {
+    _simulated = true;
+    _locations = simulatedLocations(
+      center: const Geographic(lon: 11.39085, lat: 47.27574),
+    );
+  });
+
   @override
   Widget build(BuildContext context) {
     final locations = _locations;
     return Scaffold(
-      appBar: AppBar(title: const Text('User Location')),
+      appBar: AppBar(
+        title: const Text('User Location'),
+        actions: [
+          if (!_simulated)
+            TextButton(onPressed: _simulate, child: const Text('Simulate')),
+        ],
+      ),
       body: MapLibreMap(
         options: MapOptions(
           style: MapStyles.protomapsLight.style,
