@@ -4,12 +4,35 @@ import 'dart:math';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:maplibre/maplibre.dart';
-
-/// Meters per degree of latitude.
-const _metersPerDegree = 111320.0;
+import 'package:maplibre/src/location/user_location_geometry.dart';
 
 /// Shows the user location on the [MapLibreMap] by using it in
 /// [MapLibreMap.children], and moves the camera with it while [tracking].
+///
+/// The map draws the location itself, in its style, so it stays on the
+/// ground of a 3D terrain at every pitch, and the camera moves it without
+/// any work in Dart:
+///
+/// - the circle of the location's [UserLocation.accuracy], draped on the
+///   ground;
+/// - a cone towards its [UserLocation.heading], which fades from the dot
+///   out. It lies flat at the height of the ground under the dot, turned
+///   from north whatever the map's bearing, and keeps its length on screen
+///   at every zoom;
+/// - the dot, which faces the screen at the height of the ground, so it
+///   stays round when the map is tilted. MapLibre Native draws it over the
+///   terrain; on web, maplibre-gl-js fades it where nearer ground hides it.
+///
+/// The layer adds a GeoJSON source, [sourceId], and three style layers:
+/// [accuracyLayerId], [headingLayerId] and [dotLayerId], from bottom to top.
+/// A second layer on the same map adds `-2` to each ID, and so on. They go
+/// below [belowLayerId], or else below the style's first symbol layer, so
+/// the location shows over roads and trails but under labels. Once a new
+/// style has loaded, the layer adds them to it again.
+///
+/// Each new location updates the source, but only if it moved, its
+/// accuracy changed or it turned by 1° or more, and at most 30 times a
+/// second; camera moves update nothing.
 ///
 /// The layer takes its locations from a stream, so it works the same on
 /// every platform and with any location source. It asks for no permission;
@@ -30,8 +53,26 @@ class UserLocationLayer extends StatefulWidget {
     this.trackingDuration = const Duration(milliseconds: 500),
     this.color = const Color(0xFF1A73E8),
     this.radius = 8,
+    this.style = const UserLocationStyle(),
+    this.belowLayerId,
     super.key,
   });
+
+  /// The ID of the GeoJSON source of the first user location layer of a map.
+  static const sourceId = 'maplibre-user-location';
+
+  /// The ID of the style layer of the accuracy circle, a fill layer.
+  static const accuracyLayerId = '$sourceId-accuracy';
+
+  /// The ID of the style layer of the heading cone, a symbol layer. It is
+  /// added once the cone's image is in the style.
+  static const headingLayerId = '$sourceId-heading';
+
+  /// The ID of the style layer of the dot, a circle layer.
+  static const dotLayerId = '$sourceId-dot';
+
+  /// The shortest time between two updates of the source: 30 a second.
+  static const updateInterval = Duration(microseconds: 33334);
 
   /// The locations of the user. The layer shows the latest one.
   final Stream<UserLocation> locations;
@@ -49,11 +90,21 @@ class UserLocationLayer extends StatefulWidget {
   /// How long the camera takes to follow a new location.
   final Duration trackingDuration;
 
-  /// The color of the location dot, its accuracy circle and its heading.
+  /// The color of the location dot, and of its accuracy circle and heading
+  /// cone unless [style] sets theirs.
   final Color color;
 
   /// The radius of the location dot in logical pixels.
   final double radius;
+
+  /// How the outline of the dot, the accuracy circle and the heading cone
+  /// look.
+  final UserLocationStyle style;
+
+  /// The ID of the style layer that the location goes below. If null, or if
+  /// the style has no such layer, the location goes below the style's first
+  /// symbol layer, or on top if it has none.
+  final String? belowLayerId;
 
   @override
   State<UserLocationLayer> createState() => _UserLocationLayerState();
@@ -68,13 +119,55 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
   /// started, so [UserLocationLayer.trackingZoom] applies only once.
   var _tracked = false;
 
+  /// The location the camera last moved to.
+  UserLocation? _followed;
+
   /// Where each pointer on the map went down, to tell a drag from a tap.
   final _downPositions = <int, Offset>{};
+
+  MapController? _controller;
+
+  /// The style that has the source and layers, or null.
+  StyleController? _style;
+
+  /// The ID of the source in [_style].
+  String? _sourceId;
+
+  /// The location that the source shows.
+  UserLocation? _shown;
+
+  /// Runs while updates wait for [UserLocationLayer.updateInterval] to pass
+  /// since the last one.
+  Timer? _cooldown;
+
+  /// Whether a location arrived during [_cooldown] that the source should
+  /// show.
+  var _pending = false;
+
+  /// The image of the heading cone in [_style], or null.
+  String? _coneImage;
+
+  /// Counts the cone images, so each has its own ID: gl-js can't replace
+  /// an image in place.
+  var _coneImages = 0;
 
   @override
   void initState() {
     super.initState();
     _subscribe();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Rebuilds only for a new controller or style, not with the camera.
+    final controller = MapController.maybeOf(context, camera: false);
+    _controller = controller;
+    final style = controller?.style;
+    if (identical(style, _style)) return;
+    // The source and layers went with the old style.
+    _detach(removeFromStyle: false);
+    if (style != null) _attach(style);
   }
 
   @override
@@ -89,31 +182,320 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
       _tracked = false;
       _follow();
     }
+    if (widget.color != oldWidget.color ||
+        widget.radius != oldWidget.radius ||
+        widget.style != oldWidget.style ||
+        widget.belowLayerId != oldWidget.belowLayerId) {
+      _restyle(oldWidget);
+    }
   }
 
   @override
   void dispose() {
     unawaited(_subscription?.cancel());
+    _detach(removeFromStyle: true);
     super.dispose();
   }
 
   void _subscribe() {
     _subscription = widget.locations.listen((location) {
       if (!mounted) return;
-      setState(() => _location = location);
-      _follow();
+      _location = location;
+      if (_differs(_shown, location)) _requestUpdate();
+      if (_differs(_followed, location)) _follow();
     });
   }
+
+  /// Whether [location] looks different from [old]: it moved, its accuracy
+  /// changed, or its heading appeared, went, or turned by 1° or more.
+  static bool _differs(UserLocation? old, UserLocation location) {
+    if (old == null) return true;
+    if (old.position != location.position ||
+        old.accuracy != location.accuracy) {
+      return true;
+    }
+    final (a, b) = (old.heading, location.heading);
+    if (a == null || b == null) return (a == null) != (b == null);
+    return headingDifference(a, b) >= 1;
+  }
+
+  // The source and layers in the style.
+
+  void _attach(StyleController style) {
+    _style = style;
+    var id = UserLocationLayer.sourceId;
+    for (var n = 2; style.sources[id] != null; n++) {
+      id = '${UserLocationLayer.sourceId}-$n';
+    }
+    _sourceId = id;
+    _shown = _location;
+    final data = _data();
+    style.batch(() {
+      _run(
+        style,
+        style.sources.add(
+          // Simplifying the few vertices would save nothing; tiles up to
+          // zoom 22 keep the accuracy circle round when zoomed in.
+          GeoJsonSource.data(id: id, data: data, maxZoom: 22, tolerance: 0),
+        ),
+      );
+      _addLayers(style, id);
+    });
+  }
+
+  /// Adds the accuracy and dot layers, and the cone's once its image is in
+  /// the style.
+  void _addLayers(StyleController style, String id) {
+    final below = _belowLayerId(style, id);
+    _run(style, style.layers.add(_accuracyLayer(id), belowLayerId: below));
+    _run(style, style.layers.add(_dotLayer(id), belowLayerId: below));
+    if (widget.style.showHeading) unawaited(_addCone(style, id));
+  }
+
+  /// Draws the image of the heading cone into [style], and then adds its
+  /// layer below the dot's.
+  Future<void> _addCone(StyleController style, String id) async {
+    final image = '$id-heading-${++_coneImages}';
+    final appearance = widget.style;
+    final length = appearance.headingLength;
+    final call = style.addImageFromCanvas(
+      id: image,
+      width: 2 * length,
+      height: 2 * length,
+      painter: (canvas) => paintCone(
+        canvas,
+        length: length,
+        halfAngle: appearance.headingHalfAngle,
+        color: appearance.headingColor ?? widget.color,
+        opacity: appearance.headingOpacity,
+      ),
+    );
+    _run(style, call);
+    try {
+      await call;
+    } on Object {
+      return;
+    }
+    final stale = !mounted || !identical(_style, style);
+    if (stale || image != '$id-heading-$_coneImages') {
+      // Replaced meanwhile.
+      if (!stale) _run(style, style.removeImage(image));
+      return;
+    }
+    final old = _coneImage;
+    _coneImage = image;
+    style.batch(() {
+      if (style.layers['$id-heading'] != null) {
+        _run(style, style.layers.remove('$id-heading'));
+      }
+      _run(
+        style,
+        style.layers.add(_coneLayer(id, image), belowLayerId: '$id-dot'),
+      );
+      if (old != null) _run(style, style.removeImage(old));
+    });
+  }
+
+  /// Forgets the style, and removes the source and layers from it if
+  /// [removeFromStyle] and the map still has it.
+  void _detach({required bool removeFromStyle}) {
+    _cooldown?.cancel();
+    _cooldown = null;
+    _pending = false;
+    final style = _style;
+    final id = _sourceId;
+    final image = _coneImage;
+    _style = null;
+    _sourceId = null;
+    _coneImage = null;
+    if (!removeFromStyle || style == null || id == null) return;
+    if (!identical(_controller?.style, style)) return;
+    style.batch(() {
+      _removeLayers(style, id);
+      _run(style, style.sources.remove(id));
+      if (image != null) _run(style, style.removeImage(image));
+    });
+  }
+
+  void _removeLayers(StyleController style, String id) {
+    for (final layerId in _layerIds(id)) {
+      if (style.layers[layerId] != null) {
+        _run(style, style.layers.remove(layerId));
+      }
+    }
+  }
+
+  /// Applies new colors, sizes or a new position of the layers.
+  void _restyle(UserLocationLayer oldWidget) {
+    final style = _style;
+    final id = _sourceId;
+    if (style == null || id == null) return;
+    final image = _coneImage;
+    _coneImage = null;
+    style.batch(() {
+      _removeLayers(style, id);
+      if (image != null) _run(style, style.removeImage(image));
+      _addLayers(style, id);
+    });
+    if (oldWidget.style.showAccuracy != widget.style.showAccuracy ||
+        oldWidget.style.showHeading != widget.style.showHeading) {
+      _update();
+    }
+  }
+
+  /// Reports a failed style call, unless the style went away meanwhile.
+  void _run(StyleController style, Future<void> call) {
+    unawaited(
+      call.catchError((Object error, StackTrace stackTrace) {
+        if (!mounted || !identical(_style, style)) return;
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'maplibre',
+            context: ErrorDescription('while showing the user location'),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// Updates the source now, or once [UserLocationLayer.updateInterval] has
+  /// passed since the last update.
+  void _requestUpdate() {
+    if (_sourceId == null) return;
+    if (_cooldown != null) {
+      _pending = true;
+      return;
+    }
+    _update();
+  }
+
+  void _update() {
+    final style = _style;
+    final id = _sourceId;
+    if (style == null || id == null) return;
+    _shown = _location;
+    _run(style, style.sources.updateGeoJsonData(id, _data()));
+    _cooldown?.cancel();
+    _cooldown = Timer(UserLocationLayer.updateInterval, () {
+      _cooldown = null;
+      final location = _location;
+      if (_pending && location != null && _differs(_shown, location)) {
+        _update();
+      }
+      _pending = false;
+    });
+  }
+
+  GeoJsonData _data() {
+    final location = _location;
+    if (location == null) {
+      return const GeoJsonData.text(
+        '{"type":"FeatureCollection","features":[]}',
+      );
+    }
+    final style = widget.style;
+    return GeoJsonData.text(
+      userLocationGeoJson(
+        location,
+        showAccuracy: style.showAccuracy,
+        showHeading: style.showHeading,
+      ),
+    );
+  }
+
+  static List<String> _layerIds(String id) => [
+    '$id-accuracy',
+    '$id-heading',
+    '$id-dot',
+  ];
+
+  String? _belowLayerId(StyleController style, String id) {
+    final requested = widget.belowLayerId;
+    if (requested != null && style.layers[requested] != null) return requested;
+    final own = _layerIds(id).toSet();
+    for (final layer in style.layers) {
+      if (layer.type == 'symbol' && !own.contains(layer.id)) return layer.id;
+    }
+    return null;
+  }
+
+  static Object _kind(String kind) => [
+    '==',
+    ['get', 'k'],
+    kind,
+  ];
+
+  StyleLayer _accuracyLayer(String id) {
+    final style = widget.style;
+    final color = style.accuracyColor ?? widget.color;
+    return StyleLayer.fromJson({
+      'id': '$id-accuracy',
+      'type': 'fill',
+      'source': id,
+      'filter': _kind('accuracy'),
+      'paint': {
+        // The alpha is in the colors, so that the outline's can be higher.
+        'fill-color': _css(color, style.accuracyOpacity),
+        'fill-outline-color': _css(color, style.accuracyOutlineOpacity),
+      },
+    });
+  }
+
+  static StyleLayer _coneLayer(String id, String image) => StyleLayer.fromJson({
+    'id': '$id-heading',
+    'type': 'symbol',
+    'source': id,
+    'filter': _kind('heading'),
+    'layout': {
+      'icon-image': image,
+      // Turned from north on the ground, whatever the map's bearing and
+      // pitch.
+      'icon-rotate': ['get', 'h'],
+      'icon-rotation-alignment': 'map',
+      'icon-pitch-alignment': 'map',
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+    },
+  });
+
+  StyleLayer _dotLayer(String id) {
+    final style = widget.style;
+    return StyleLayer.fromJson({
+      'id': '$id-dot',
+      'type': 'circle',
+      'source': id,
+      'filter': _kind('dot'),
+      'paint': {
+        'circle-radius': widget.radius,
+        'circle-color': _css(widget.color, 1),
+        'circle-stroke-color': _css(style.strokeColor, 1),
+        'circle-stroke-width': style.strokeWidth,
+        // Faces the screen, so it stays round when the map is tilted.
+        'circle-pitch-alignment': 'viewport',
+        'circle-pitch-scale': 'viewport',
+      },
+    });
+  }
+
+  static String _css(Color color, double opacity) =>
+      Literal<Color>(color.withValues(alpha: (color.a * opacity).clamp(0, 1)))
+              .toJson()!
+          as String;
+
+  // Tracking
 
   /// Moves the camera to the latest location while tracking.
   void _follow() {
     final location = _location;
-    final controller = MapController.maybeOf(context);
+    final controller = _controller;
     if (location == null ||
         controller == null ||
         _tracking == UserLocationTracking.none) {
       return;
     }
+    _followed = location;
     final zoom = _tracked ? null : widget.trackingZoom;
     _tracked = true;
     unawaited(
@@ -156,33 +538,6 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = MapController.maybeOf(context);
-    final camera = CameraPosition.maybeOf(context);
-    final location = _location;
-    _UserLocationPainter? painter;
-    if (controller != null && camera != null && location != null) {
-      final accuracy = location.accuracy;
-      // The screen distance to a point the accuracy north, so the circle
-      // follows the zoom, the latitude and the projection.
-      final points = controller.toScreenLocations([
-        location.position,
-        if (accuracy != null && accuracy > 0)
-          Geographic(
-            lon: location.position.lon,
-            lat: min(90, location.position.lat + accuracy / _metersPerDegree),
-          ),
-      ]);
-      final heading = location.heading;
-      painter = _UserLocationPainter(
-        center: points.first,
-        accuracyRadius: points.length > 1
-            ? (points[1] - points[0]).distance
-            : 0,
-        heading: heading == null ? null : heading - camera.bearing,
-        color: widget.color,
-        radius: widget.radius,
-      );
-    }
     // Translucent, so the map behind still gets every pointer.
     return Positioned.fill(
       child: Listener(
@@ -192,77 +547,40 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
         onPointerUp: _onPointerEnd,
         onPointerCancel: _onPointerEnd,
         onPointerSignal: _onPointerSignal,
-        child: IgnorePointer(child: CustomPaint(painter: painter)),
       ),
     );
   }
 }
 
-class _UserLocationPainter extends CustomPainter {
-  const _UserLocationPainter({
-    required this.center,
-    required this.accuracyRadius,
-    required this.heading,
-    required this.color,
-    required this.radius,
-  });
-
-  final Offset center;
-  final double accuracyRadius;
-
-  /// The heading on screen, in degrees clockwise from up.
-  final double? heading;
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (accuracyRadius > radius) {
-      canvas
-        ..drawCircle(
-          center,
-          accuracyRadius,
-          Paint()..color = color.withValues(alpha: 0.15),
-        )
-        ..drawCircle(
-          center,
-          accuracyRadius,
-          Paint()
-            ..color = color.withValues(alpha: 0.4)
-            ..style = PaintingStyle.stroke,
-        );
-    }
-    if (heading case final double heading) {
-      // A cone of 60 degrees toward the heading.
-      final direction = (heading - 90) * pi / 180;
-      final length = radius * 4;
-      final cone = Path()
-        ..moveTo(center.dx, center.dy)
-        ..arcTo(
-          Rect.fromCircle(center: center, radius: length),
-          direction - pi / 6,
-          pi / 3,
-          false,
-        )
-        ..close();
-      canvas.drawPath(
-        cone,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [color.withValues(alpha: 0.5), color.withValues(alpha: 0)],
-          ).createShader(Rect.fromCircle(center: center, radius: length)),
-      );
-    }
-    canvas
-      ..drawCircle(center, radius + 2, Paint()..color = const Color(0xFFFFFFFF))
-      ..drawCircle(center, radius, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_UserLocationPainter oldDelegate) =>
-      center != oldDelegate.center ||
-      accuracyRadius != oldDelegate.accuracyRadius ||
-      heading != oldDelegate.heading ||
-      color != oldDelegate.color ||
-      radius != oldDelegate.radius;
+/// Paints the heading cone, pointing up from the center of a square
+/// 2 [length] wide: [opacity] at the apex, fading to nothing at [length].
+@visibleForTesting
+void paintCone(
+  Canvas canvas, {
+  required double length,
+  required double halfAngle,
+  required Color color,
+  required double opacity,
+}) {
+  final center = Offset(length, length);
+  final half = halfAngle.clamp(0.5, 180) * pi / 180;
+  final bounds = Rect.fromCircle(center: center, radius: length);
+  final cone = Path()
+    ..moveTo(center.dx, center.dy)
+    ..arcTo(bounds, -pi / 2 - half, 2 * half, false)
+    ..close();
+  final apex = color.withValues(alpha: color.a * opacity.clamp(0, 1));
+  canvas.drawPath(
+    cone,
+    Paint()
+      ..isAntiAlias = true
+      ..shader = RadialGradient(
+        colors: [
+          apex,
+          apex.withValues(alpha: apex.a * 0.45),
+          apex.withValues(alpha: 0),
+        ],
+        stops: const [0, 0.5, 1],
+      ).createShader(bounds),
+  );
 }

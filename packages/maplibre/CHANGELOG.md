@@ -14,9 +14,25 @@
   the ground under the finger. A `GestureCameraSink` that took a non-null
   `around` to mean that the step zooms or rotates must check `zoomBy` and
   `rotateBy` instead.
+- `UserLocationLayer` is drawn by the map, in its style, so it stays on
+  the ground of a 3D terrain: its constructor is unchanged, but the location
+  is now a GeoJSON source and three style layers
+  (`UserLocationLayer.sourceId`, `accuracyLayerId`, `headingLayerId`,
+  `dotLayerId`), below the style's first symbol layer by default. So
+  `featuresAtPoint` without `layerIds` also finds the location, layers that
+  an app adds on top later cover it, and it shows only once a style has
+  loaded. Pass `belowLayerId` to place it, and filter feature queries by
+  `layerIds`.
 
 ### Features
 
+- `UserLocationLayer` draws the location on the ground of a 3D terrain at
+  every pitch: a draped accuracy circle, a heading cone that fades from the
+  dot and keeps its length on screen at every zoom, and a dot that faces the
+  screen. Camera moves cost nothing in Dart; the source updates only when
+  the location moves, its accuracy changes or it turns by 1° or more, at
+  most 30 times a second. `UserLocationStyle` sets the outline, the
+  accuracy circle and the cone.
 - `MapController.maybeOf(context, camera: false)` looks up the controller
   without rebuilding the widget on every camera change, only when the map
   hands out a new style.

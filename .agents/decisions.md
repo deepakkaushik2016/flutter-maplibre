@@ -391,12 +391,48 @@ Each entry: the decision, then why.
   aspect makes its per-frame cost zero. Plain `maybeOf` keeps rebuilding
   with the camera, as widgets rely on it.
 
-- **User location is a Flutter layer, `UserLocationLayer`, fed by a
-  `Stream<UserLocation>`; there is no `PermissionManager`.** It paints in
-  Dart, so it works the same on every platform, and tracking runs in Dart
-  over `animateCamera`. A translucent `Listener` stops the tracking on a drag
-  or wheel. Permissions are left to `geolocator` or `permission_handler`;
-  `maplibre_geolocator` adapts `geolocator` positions.
+- **User location is a `UserLocationLayer` in `MapLibreMap.children`, fed by
+  a `Stream<UserLocation>`, that the map draws in its style; there is no
+  `PermissionManager`.** The Flutter overlay it was placed itself with the
+  synchronous `toScreenLocations`, which is at sea level on native: over a
+  terrain it floated kilometres off the ground (325 px at pitch 60 over the
+  test ridge). The engine places style layers on the terrain itself, at no
+  Dart cost per frame. One GeoJSON source holds the accuracy circle, the
+  cone's point and the dot (property `k`), and three layers filter it:
+  - accuracy: a fill, draped on the ground, a 64-vertex geodesic circle
+    (≤ 0.6 px from round at 500 px);
+  - heading: a symbol of a canvas-drawn gradient sector, `icon-rotate` by
+    the feature's `h` with rotation and pitch alignment `map`, so it lies on
+    the ground plane at the dot's height, turned from north. It keeps its
+    length on screen, as the beams of mainstream map apps do, since meters
+    don't work from z12 to z18 (100 m is 8 px at z12 and 490 px at z18 at
+    47° N). A draped fill can't be screen-sized without new geometry per
+    zoom: a stack of sectors faded by zoom-and-feature `fill-opacity` was
+    tried, but MapLibre Native evaluates such properties at the tile's
+    zoom, not the camera's, so the cone's area swung between 444 and 990 px
+    from one half zoom to the next over terrain, and at random without it.
+    The symbol measured 1,516 ± 4 px at every zoom from 6 to 21, with and
+    without terrain. Over a slope its far end leaves the ground by the
+    slope's rise over 64 px; the beam fades out there.
+  - dot: a circle with pitch alignment and scale `viewport`, so it stays
+    round and the same size when tilted, elevated by the engine. MapLibre
+    Native draws elevated circles without a depth test, so the dot never
+    hides behind terrain; gl-js fades circles that nearer ground hides
+    (`calculate_visibility`), which is the expected look for a ridge between
+    the camera and the user. Measured: drawn within 0.1 px of
+    `toScreenLocationOnTerrain` on iOS.
+  The layers go below the first symbol layer (labels) unless
+  `belowLayerId` names one, and come back on every style: the layer looks
+  the controller up with `MapController.maybeOf(context, camera: false)`,
+  an `InheritedModel` aspect that rebuilds it only when the map hands out a
+  new `StyleController` (only after a style loaded, so no deferred-load
+  machinery is needed), not on every camera change as the overlay did. The
+  source updates when the location moves, its accuracy changes or it
+  turns by 1° or more, at most every 33.3 ms, with a trailing update for the
+  latest; tracking runs in Dart over `animateCamera` on the same changes. A
+  translucent `Listener` stops the tracking on a drag or wheel. Permissions
+  are left to `geolocator` or `permission_handler`; `maplibre_geolocator`
+  adapts `geolocator` positions.
 
 - **Expressions are a sealed `Expression<T>` of `Literal`, `Call` and
   `RawValue`, with static members and extensions, and layer properties take
