@@ -10,6 +10,10 @@ class RecordingStyleBackend implements StyleBackend {
   /// Makes the next call that returns a future fail.
   bool failNext = false;
 
+  /// Makes layer moves throw, as maplibre-gl-js does for a layer that its
+  /// style no longer has.
+  bool failMoves = false;
+
   Future<void> _done() async {
     if (!failNext) return;
     failNext = false;
@@ -29,8 +33,10 @@ class RecordingStyleBackend implements StyleBackend {
   }
 
   @override
-  void moveLayer(String id, {String? belowLayerId}) =>
-      calls.add('moveLayer $id below $belowLayerId');
+  void moveLayer(String id, {String? belowLayerId}) {
+    if (failMoves) throw StateError('The map has no layer "$id".');
+    calls.add('moveLayer $id below $belowLayerId');
+  }
 
   @override
   void setLayerProperty(

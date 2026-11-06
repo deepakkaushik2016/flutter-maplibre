@@ -166,6 +166,13 @@ void main() {
       expect(backend.calls, ['removeLayer middle']);
     });
 
+    test('keeps its order when the map rejects a move', () {
+      backend.failMoves = true;
+      expect(() => layers.move('bottom'), throwsStateError);
+      // Still the order of the map.
+      expect(ids(), ['bottom', 'middle', 'top']);
+    });
+
     test('moves, also through the layer', () {
       layers.move('bottom');
       expect(ids(), ['middle', 'top', 'bottom']);

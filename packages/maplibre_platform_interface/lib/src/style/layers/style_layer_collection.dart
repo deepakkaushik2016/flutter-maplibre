@@ -101,7 +101,8 @@ final class StyleLayers extends Iterable<StyleLayer> {
 
   /// Moves the layer [id] below the layer [belowLayerId], or to the top if it
   /// is null. Fails with an [ArgumentError] if either isn't a layer of this
-  /// style.
+  /// style. If the map rejects the move, the error propagates and the
+  /// collection keeps its order.
   void move(String id, {String? belowLayerId}) {
     final index = _indexOf(id);
     if (index == -1) {
@@ -115,12 +116,14 @@ final class StyleLayers extends Iterable<StyleLayer> {
         'The style has no such layer',
       );
     }
+    // The map first: if it rejects the move, the collection keeps its
+    // order, which is still the map's.
+    _backend.moveLayer(id, belowLayerId: belowLayerId);
     final layer = _layers.removeAt(index);
     _layers.insert(
       belowLayerId == null ? _layers.length : _indexOf(belowLayerId),
       layer,
     );
-    _backend.moveLayer(id, belowLayerId: belowLayerId);
   }
 
   /// Fills the collection with the layers of a loaded style, by the `layers`
