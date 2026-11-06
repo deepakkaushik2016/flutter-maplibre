@@ -16,6 +16,7 @@ import 'terrain_gestures_test.dart' as terrain_gestures;
 import 'terrain_test.dart' as terrain;
 import 'ui_test.dart' as ui;
 import 'unsupported_test.dart' as unsupported;
+import 'user_location_test.dart' as user_location;
 
 /// Runs every integration test in one app launch, which is much faster on
 /// devices than one launch per file.
@@ -34,6 +35,7 @@ void main() {
   layers.runTests();
   gestures.runTests();
   ui.runTests();
+  user_location.runTests();
   offline.runTests();
   paused.runTests();
   unsupported.runTests();

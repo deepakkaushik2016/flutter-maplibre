@@ -1,5 +1,6 @@
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:typed_data';
 
 JSObject get _performance =>
     globalContext.getProperty<JSObject>('performance'.toJS);
@@ -70,3 +71,70 @@ void addNotFoundProtocol(
     }).toJS,
   );
 }
+
+/// The pixels of a frame that maplibre-gl-js drew: `rgba` rows of `width`
+/// pixels, `scale` pixels per logical pixel of the map.
+typedef MapFrame = ({int width, int height, Uint8List rgba, double scale});
+
+/// Reads the next frame that the maplibre-gl-js map on the page draws.
+///
+/// Its canvas keeps no frame once the browser showed it, so this reads the
+/// canvas right after gl-js renders, in the same task, and has it render
+/// once more. Before it has seen the map render, [render] makes it.
+Future<MapFrame> readMapFrame(void Function() render) {
+  if (!globalContext.has('__maplibreReadFrame')) {
+    globalContext.callMethod<JSAny?>('eval'.toJS, _readFrameScript.toJS);
+  }
+  final frame = globalContext
+      .callMethod<JSPromise<JSObject>>('__maplibreReadFrame'.toJS)
+      .toDart;
+  if (!globalContext.callMethod<JSBoolean>('__maplibreSeen'.toJS).toDart) {
+    render();
+  }
+  return frame.then((frame) {
+    final data = frame.getProperty<JSObject>('data'.toJS);
+    return (
+      width: frame.getProperty<JSNumber>('width'.toJS).toDartInt,
+      height: frame.getProperty<JSNumber>('height'.toJS).toDartInt,
+      rgba: (data as JSUint8ClampedArray).toDart.buffer.asUint8List(),
+      scale: frame.getProperty<JSNumber>('scale'.toJS).toDartDouble,
+    );
+  });
+}
+
+const _readFrameScript = '''
+(() => {
+  const proto = maplibregl.Map.prototype;
+  const render = proto._render;
+  let pending = [];
+  let last = null;
+  proto._render = function (...args) {
+    const result = render.apply(this, args);
+    last = this;
+    if (pending.length > 0) {
+      const canvas = this.getCanvas();
+      const copy = document.createElement('canvas');
+      copy.width = canvas.width;
+      copy.height = canvas.height;
+      const context = copy.getContext('2d');
+      context.drawImage(canvas, 0, 0);
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
+      const frame = {
+        width: canvas.width,
+        height: canvas.height,
+        data: image.data,
+        scale: canvas.width / canvas.clientWidth,
+      };
+      const waiting = pending;
+      pending = [];
+      for (const resolve of waiting) resolve(frame);
+    }
+    return result;
+  };
+  window.__maplibreReadFrame = () => new Promise((resolve) => {
+    pending.push(resolve);
+    if (last) last.triggerRepaint();
+  });
+  window.__maplibreSeen = () => last !== null;
+})();
+''';

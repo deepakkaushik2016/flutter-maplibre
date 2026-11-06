@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// Clears the browser's resource timing entries.
 void clearResourceTimings() {}
 
@@ -18,3 +20,12 @@ void addNotFoundProtocol(
   String scheme,
   Future<void> Function(String url) until,
 ) => throw UnsupportedError('Only maplibre-gl-js has custom protocols.');
+
+/// The pixels of a frame that maplibre-gl-js drew: `rgba` rows of `width`
+/// pixels, `scale` pixels per logical pixel of the map.
+typedef MapFrame = ({int width, int height, Uint8List rgba, double scale});
+
+/// Reads the next frame that the maplibre-gl-js map on the page draws.
+/// Before it has seen the map render, [render] makes it.
+Future<MapFrame> readMapFrame(void Function() render) =>
+    throw UnsupportedError('Only maplibre-gl-js draws into a canvas.');
