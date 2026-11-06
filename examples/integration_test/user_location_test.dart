@@ -25,6 +25,9 @@ const _dotColor = Color(0xFFFF00FF);
 /// A cone color that nothing else on the fixture's gray map has.
 const _coneColor = Color(0xFF00C000);
 
+/// An accuracy color that nothing else on the fixture's gray map has.
+const _accuracyColor = Color(0xFF00FFFF);
+
 /// How far in logical pixels the drawn dot may be from where the terrain
 /// puts its location.
 const _tolerance = 2.0;
@@ -121,6 +124,53 @@ void runTests() {
           reason: 'drawn at $found, the terrain puts it at $expected',
         );
       }
+    });
+
+    testWidgets('drapes the accuracy circle around the dot', (tester) async {
+      final map = await pumpTerrainMap(
+        tester,
+        style: const UserLocationStyle(
+          showHeading: false,
+          accuracyColor: _accuracyColor,
+          accuracyOpacity: 1,
+          accuracyOutlineOpacity: 1,
+        ),
+      );
+      final location = await groundAt(map, map.center + const Offset(0, 80));
+      locations.add(UserLocation(position: location, accuracy: 400));
+      final dot = await onTerrain(map, location);
+      // 400 m at zoom 13 is about 30 px; the dot covers its middle.
+      final circle = await findPixels(map, dot, _isAccuracy, minimum: 500);
+      final east = await onTerrain(map, _east(location, 400));
+      debugPrint(
+        'accuracy circle centered at $circle, dot at $dot, its east edge '
+        'at $east',
+      );
+      expect((circle - dot).distance, lessThan(8));
+      // It reaches 400 m east on the ground, not further.
+      final edge = (east - dot).distance;
+      expect(
+        await _pixels(
+          map,
+          east - (east - dot) / edge * 3,
+          _isAccuracy,
+          1,
+          radius: 2,
+        ),
+        isNotNull,
+        reason: 'no circle just inside its edge',
+      );
+      expect(
+        await _pixels(
+          map,
+          east + (east - dot) / edge * 4,
+          _isAccuracy,
+          1,
+          radius: 1.5,
+        ),
+        isNull,
+        reason: 'circle beyond its edge',
+      );
     });
 
     testWidgets('points the cone along the heading as the map turns', (
@@ -286,6 +336,48 @@ void runTests() {
       expect((found - expected).distance, lessThan(_tolerance));
     });
 
+    testWidgets('takes locations while a new style loads, without errors', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      final location = await groundAt(map, map.center + const Offset(40, 80));
+      locations.add(UserLocation(position: location, heading: 0));
+      await findDot(map, await onTerrain(map, location));
+      final reported = <FlutterErrorDetails>[];
+      final onError = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      try {
+        final loads = map.styleLoads;
+        final style = fixture.style();
+        ((style['layers']! as List).single as Map)['paint'] = {
+          'background-color': '#cccccc',
+        };
+        // A compass turns while the style loads: every location is new.
+        var heading = 0.0;
+        void turn() => locations.add(
+          UserLocation(position: location, heading: heading += 5),
+        );
+        map.setOptionsNow(options(style: style));
+        turn();
+        await map.pumpUntil(() {
+          turn();
+          return map.styleLoads > loads;
+        }, reason: () => 'the new style never loaded');
+        for (var i = 0; i < 5; i++) {
+          turn();
+          await tester.pump(const Duration(milliseconds: 40));
+        }
+        await map.style.setTerrain(_terrain);
+        await fixture.waitUntilSettled(map, GroundView(map));
+        final expected = await onTerrain(map, location);
+        final found = await findDot(map, expected);
+        expect((found - expected).distance, lessThan(_tolerance));
+      } finally {
+        FlutterError.onError = onError;
+      }
+      expect(reported.map((details) => details.exceptionAsString()), isEmpty);
+    });
+
     testWidgets('tracking keeps the camera on the location on the ground', (
       tester,
     ) async {
@@ -340,6 +432,8 @@ bool _isDot(int r, int g, int b) => r > 200 && b > 200 && g < 90;
 
 bool _isCone(int r, int g, int b) => g > r + 40 && g > b + 40;
 
+bool _isAccuracy(int r, int g, int b) => r < 60 && g > 200 && b > 200;
+
 /// Waits until the frame on screen has at least [minimum] pixels that
 /// [matches] within 60 logical pixels of [around], in the same place in two
 /// frames in a row, and returns their center.
@@ -367,15 +461,16 @@ Future<Offset> findPixels(
   }
 }
 
-/// The center of the pixels that [matches] within 60 logical pixels of
-/// [around] in the frame on screen, or null if there are fewer than
+/// The center of the pixels that [matches] within [radius] logical pixels
+/// of [around] in the frame on screen, or null if there are fewer than
 /// [minimum] logical pixels' worth.
 Future<Offset?> _pixels(
   TestMap map,
   Offset around,
   bool Function(int r, int g, int b) matches,
-  int minimum,
-) async {
+  int minimum, {
+  double radius = 60,
+}) async {
   if (kIsWeb) {
     // maplibre-gl-js draws into a DOM element that Flutter can't read.
     // Any change to the style renders.
@@ -390,6 +485,7 @@ Future<Offset?> _pixels(
       around,
       matches,
       minimum,
+      radius,
     );
   }
   final tester = map.tester;
@@ -414,6 +510,7 @@ Future<Offset?> _pixels(
       origin + around,
       matches,
       minimum,
+      radius,
     );
     return found == null ? null : found - origin;
   } finally {
@@ -422,7 +519,7 @@ Future<Offset?> _pixels(
 }
 
 /// The center, in logical pixels, of the pixels of [rgba] that [matches]
-/// within 60 logical pixels of [around], or null if there are fewer than
+/// within [radius] logical pixels of [around], or null if there are fewer than
 /// [minimum] logical pixels' worth. [rgba] holds rows of [width] pixels,
 /// [scale] per logical pixel.
 Offset? _centroid(
@@ -433,8 +530,8 @@ Offset? _centroid(
   Offset around,
   bool Function(int r, int g, int b) matches,
   int minimum,
+  double radius,
 ) {
-  const radius = 60.0;
   final center = around * scale;
   final left = max(0, (center.dx - radius * scale).floor());
   final right = min(width - 1, (center.dx + radius * scale).ceil());
