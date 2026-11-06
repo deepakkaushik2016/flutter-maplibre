@@ -189,29 +189,72 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('adds its source and layers below the labels', (tester) async {
+    testWidgets('puts the dot and cone on top, the accuracy below labels', (
+      tester,
+    ) async {
       await pump(tester);
       expect(style.calls, [
         'addSource $_source',
         'addLayer ${UserLocationLayer.accuracyLayerId} below labels',
-        'addLayer ${UserLocationLayer.dotLayerId} below labels',
+        'addLayer ${UserLocationLayer.dotLayerId} below null',
         'addImage $_source-heading-1',
         'addLayer $_heading below $_dot',
       ]);
       expect(style.controller.layers.map((layer) => layer.id), [
         'background',
         UserLocationLayer.accuracyLayerId,
+        'labels',
         UserLocationLayer.headingLayerId,
         UserLocationLayer.dotLayerId,
-        'labels',
       ]);
+    });
+
+    testWidgets('moves back on top of layers that the app adds later', (
+      tester,
+    ) async {
+      await pump(tester);
+      await style.controller.sources.add(
+        const GeoJsonSource.data(id: 'trail', data: GeoJsonData.text('{}')),
+      );
+      await style.controller.layers.add(
+        LineStyleLayer(id: 'trail', sourceId: 'trail'),
+      );
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 1, lat: 2)),
+      );
+      expect(style.controller.layers.map((layer) => layer.id).skip(3), [
+        'trail',
+        UserLocationLayer.headingLayerId,
+        UserLocationLayer.dotLayerId,
+      ]);
+      // Not when the app placed it.
+      await tester.pumpWidget(app(belowLayerId: 'labels'));
+      await tester.pump();
+      await style.controller.layers.add(
+        LineStyleLayer(id: 'top', sourceId: 'trail'),
+      );
+      await tester.pump(UserLocationLayer.updateInterval);
+      await add(
+        tester,
+        const UserLocation(position: Geographic(lon: 3, lat: 4)),
+      );
+      expect(style.controller.layers.last.id, 'top');
     });
 
     testWidgets('goes below belowLayerId, or on top without labels', (
       tester,
     ) async {
       await tester.pumpWidget(app(belowLayerId: 'background'));
-      expect(style.calls[1], endsWith('below background'));
+      await tester.pump();
+      // All of it.
+      expect(style.calls, [
+        'addSource $_source',
+        'addLayer ${UserLocationLayer.accuracyLayerId} below background',
+        'addLayer $_dot below background',
+        'addImage $_source-heading-1',
+        'addLayer $_heading below $_dot',
+      ]);
       await tester.pumpWidget(app(layer: false));
 
       final plain = _Style(
@@ -220,9 +263,11 @@ void main() {
         ],
       );
       when(() => controller.style).thenReturn(plain.controller);
-      // A missing layer falls back to the labels, here none: on top.
+      // A missing layer falls back to the default: here no labels, so all
+      // on top.
       await tester.pumpWidget(app(belowLayerId: 'missing'));
       expect(plain.calls[1], endsWith('below null'));
+      expect(plain.calls[2], endsWith('below null'));
     });
 
     testWidgets('draws the dot facing the screen and the cone on the ground', (
@@ -396,7 +441,7 @@ void main() {
       expect(next.calls, [
         'addSource $_source',
         'addLayer ${UserLocationLayer.accuracyLayerId} below names',
-        'addLayer ${UserLocationLayer.dotLayerId} below names',
+        'addLayer ${UserLocationLayer.dotLayerId} below null',
         'addImage $_source-heading-2',
         'addLayer $_heading below $_dot',
       ]);
@@ -572,7 +617,7 @@ void main() {
         'removeLayer ${UserLocationLayer.dotLayerId}',
         'removeImage $_source-heading-1',
         'addLayer ${UserLocationLayer.accuracyLayerId} below labels',
-        'addLayer ${UserLocationLayer.dotLayerId} below labels',
+        'addLayer ${UserLocationLayer.dotLayerId} below null',
         'addImage $_source-heading-2',
         'addLayer ${UserLocationLayer.headingLayerId} below ${UserLocationLayer.dotLayerId}',
       ]);

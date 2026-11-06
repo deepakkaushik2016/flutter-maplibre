@@ -424,8 +424,15 @@ Each entry: the decision, then why.
     (`calculate_visibility`), which is the expected look for a ridge between
     the camera and the user. Measured: drawn within 0.1 px of
     `toScreenLocationOnTerrain` on iOS.
-  The layers go below the first symbol layer (labels) unless
-  `belowLayerId` names one, and come back on every style: the layer looks
+  By default the dot and the cone go on top of every layer and the
+  accuracy circle below the first symbol layer (usually labels; a shield
+  or arrow layer in some styles), as AllTrails and Google keep "you are
+  here" over labels (ruling R37, over the brief's "below labels"). Each
+  source update moves the cone and dot back on top of layers the app added
+  since: one walk of the layer list, a move only when another layer is on
+  top. `belowLayerId` puts all three below that layer instead, and then
+  they stay where the app put them. The layers come back on every style:
+  the layer looks
   the controller up with `MapController.maybeOf(context, camera: false)`,
   an `InheritedModel` aspect that rebuilds it only when the map hands out a
   new `StyleController` (only after a style loaded, so no deferred-load

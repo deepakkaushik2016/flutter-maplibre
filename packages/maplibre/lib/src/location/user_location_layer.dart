@@ -25,10 +25,10 @@ import 'package:maplibre/src/location/user_location_geometry.dart';
 ///
 /// The layer adds a GeoJSON source, [sourceId], and three style layers:
 /// [accuracyLayerId], [headingLayerId] and [dotLayerId], from bottom to top.
-/// A second layer on the same map adds `-2` to each ID, and so on. They go
-/// below [belowLayerId], or else below the style's first symbol layer, so
-/// the location shows over roads and trails but under labels. Once a new
-/// style has loaded, the layer adds them to it again.
+/// A second layer on the same map adds `-2` to each ID, and so on. The dot
+/// and its cone go on top of the style and the accuracy circle below its
+/// labels, unless [belowLayerId] places all three. Once a new style has
+/// loaded, the layer adds them to it again, with the latest location.
 ///
 /// Each new location updates the source, but only if it moved, its
 /// accuracy changed or it turned by 1° or more, at most 30 times a second
@@ -103,9 +103,14 @@ class UserLocationLayer extends StatefulWidget {
   /// look.
   final UserLocationStyle style;
 
-  /// The ID of the style layer that the location goes below. If null, or if
-  /// the style has no such layer, the location goes below the style's first
-  /// symbol layer, or on top if it has none.
+  /// The ID of the style layer that the whole location goes below.
+  ///
+  /// If null, or if the style has no such layer, the dot and its cone go on
+  /// top of every layer, as in mainstream map apps, and stay there: a source
+  /// update moves them back over layers that the app added since. The
+  /// accuracy circle goes below the style's first symbol layer, which is
+  /// usually the first of its labels; in some styles it is a road shield or
+  /// a one-way arrow instead, and the circle goes below that.
   final String? belowLayerId;
 
   @override
@@ -272,10 +277,16 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
   }
 
   /// Adds the accuracy and dot layers, and the cone's once its image is in
-  /// the style.
+  /// the style. See [UserLocationLayer.belowLayerId] for where.
   void _addLayers(StyleController style, String id) {
-    final below = _belowLayerId(style, id);
-    _run(style, style.layers.add(_accuracyLayer(id), belowLayerId: below));
+    final below = _requestedBelow(style);
+    _run(
+      style,
+      style.layers.add(
+        _accuracyLayer(id),
+        belowLayerId: below ?? _labels(style, id),
+      ),
+    );
     _run(style, style.layers.add(_dotLayer(id), belowLayerId: below));
     if (widget.style.showHeading) unawaited(_addCone(style, id));
   }
@@ -430,6 +441,7 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     // A style that dropped the source is on its way out; the next one gets
     // the latest location.
     if (style.sources[id] == null) return;
+    _keepOnTop(style, id);
     _shown = _location;
     _updating = true;
     final call = style.sources.updateGeoJsonData(id, _data());
@@ -456,6 +468,17 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     });
   }
 
+  /// Moves the cone and the dot back on top of layers that the app added
+  /// since, unless [UserLocationLayer.belowLayerId] places them.
+  void _keepOnTop(StyleController style, String id) {
+    if (_requestedBelow(style) != null) return;
+    final layers = style.layers;
+    // One walk of the layer list; moves only when another layer is on top.
+    if (layers.isEmpty || layers.last.id == '$id-dot') return;
+    if (layers['$id-heading'] != null) layers.move('$id-heading');
+    if (layers['$id-dot'] != null) layers.move('$id-dot');
+  }
+
   GeoJsonData _data() {
     final location = _location;
     if (location == null) {
@@ -479,12 +502,19 @@ class _UserLocationLayerState extends State<UserLocationLayer> {
     '$id-dot',
   ];
 
-  String? _belowLayerId(StyleController style, String id) {
+  /// [UserLocationLayer.belowLayerId], if [style] has it.
+  String? _requestedBelow(StyleController style) {
     final requested = widget.belowLayerId;
-    if (requested != null && style.layers[requested] != null) return requested;
-    final own = _layerIds(id).toSet();
+    return requested != null && style.layers[requested] != null
+        ? requested
+        : null;
+  }
+
+  /// The first symbol layer of [style] other than the cone, which is
+  /// usually the first of its labels, or null if it has none.
+  static String? _labels(StyleController style, String id) {
     for (final layer in style.layers) {
-      if (layer.type == 'symbol' && !own.contains(layer.id)) return layer.id;
+      if (layer.type == 'symbol' && layer.id != '$id-heading') return layer.id;
     }
     return null;
   }

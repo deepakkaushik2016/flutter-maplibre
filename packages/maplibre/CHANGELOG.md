@@ -18,11 +18,12 @@
   the ground of a 3D terrain: its constructor is unchanged, but the location
   is now a GeoJSON source and three style layers
   (`UserLocationLayer.sourceId`, `accuracyLayerId`, `headingLayerId`,
-  `dotLayerId`), below the style's first symbol layer by default. So
-  `featuresAtPoint` without `layerIds` also finds the location, layers that
-  an app adds on top later cover it, and it shows only once a style has
-  loaded. Pass `belowLayerId` to place it, and filter feature queries by
-  `layerIds`.
+  `dotLayerId`). By default the dot and its heading cone go on top of the
+  style and move back on top of layers added later, and the accuracy
+  circle goes below the style's first symbol layer; `belowLayerId` puts
+  all three below that layer instead. `featuresAtPoint` without `layerIds`
+  also finds the location, and it shows only once a style has loaded.
+  Filter feature queries by `layerIds`.
 
 ### Features
 
