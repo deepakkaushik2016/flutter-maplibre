@@ -17,6 +17,14 @@ final class _IoSurfaceRingTarget extends LibraryRingTarget {
   @override
   bool get holdsFrames => true;
 
+  /// Four: with three, every slot is held right after a present (the
+  /// presented frame, the one Flutter shows, and the one before, which a
+  /// frame still on the GPU may read), so the next frame waits for Flutter's
+  /// next vsync to free one and a frame longer than the rest of a vsync
+  /// halves the frame rate. The C library allows rings of up to eight.
+  @override
+  int get slotCount => 4;
+
   @override
   RenderSessionHandle attach(
     MapHandle map,
@@ -25,7 +33,7 @@ final class _IoSurfaceRingTarget extends LibraryRingTarget {
   ) => map.attachIoSurfaceRing(
     IoSurfaceRingDescriptor(
       logicalSize: logicalSize(extent),
-      bufferCount: gpuSlotCount,
+      bufferCount: slotCount,
     ),
     attachOptions(frameWake),
   );

@@ -22,6 +22,14 @@
   and the ground that the terrain draws, and tell whether nearer ground
   hides a point, on web and native.
 
+### Performance
+
+- iOS and macOS: a map's texture ring has a fourth slot, so the map renders
+  its next frame right after a present instead of waiting for Flutter's next
+  vsync. Maps whose frames took more than the rest of a vsync ran at half the
+  display rate. Each map uses about 14 MB more memory on a 1290 x 2796
+  screen.
+
 ## 0.4.0-pre.2
 
 The second pre-release of 0.4 reworks the event, camera, query and gesture

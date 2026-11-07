@@ -40,7 +40,7 @@ Each entry: the decision, then why.
   frame, hands each rendered one to the target on one serial GPU queue, and
   demands the next; targets attach the session, resize, present, end the
   session, and dispose the texture. Windows, Linux, iOS, and macOS share
-  `RingTarget` (a ring of three images). Windows copies each frame on the
+  `RingTarget` (a ring of three images, four on iOS and macOS). Windows copies each frame on the
   GPU before releasing it; Linux, iOS and macOS keep it acquired while
   Flutter samples its slot (`holdsFrames`), and release it once the plugin
   reports the slot free. A resize releases the held frames first, as the
@@ -166,7 +166,7 @@ Each entry: the decision, then why.
   Swift Package Manager by default since 3.44, so there is no podspec, and
   the example's iOS and macOS projects have no Podfile. The Flutter minimum
   of 3.47 means apps need no `flutter config` step.
-- **Sessions render into the library's ring of three BGRA8 IOSurfaces
+- **Sessions render into the library's ring of four BGRA8 IOSurfaces
   (`attachIoSurfaceRing`), which the plugin wraps in pixel buffers
   (`CVPixelBufferCreateWithIOSurface`, once per ring), and the
   `FlutterTexture` returns the presented slot's buffer from
@@ -177,8 +177,14 @@ Each entry: the decision, then why.
   frame it replaced once `maplibre_native_gpu_texture_slot_in_use` reports
   its slot free: not the presented slot, and neither of the last two slots
   Flutter took (it holds the last buffer until it takes the next, and a frame
-  still on the GPU may read the one before). So MapLibre renders into one
-  free slot while Flutter keeps up. `IOSurfaceIsInUse` can't tell: the ring's
+  still on the GPU may read the one before). So MapLibre renders into the
+  fourth slot right after a present. With three, every slot was held after
+  each present and the next frame waited for Flutter's next vsync to free
+  one, which held an iPhone 15 Plus to 30 fps (median 33.3 ms) whenever a
+  frame took longer than the rest of that vsync; four gave 60 fps (16.7 ms)
+  on the same build. The fourth slot costs its 13.8 MB IOSurface at
+  1290 x 2796; the C library shares one depth and stencil pair across the
+  ring. `IOSurfaceIsInUse` can't tell: the ring's
   own buffer and texture keep every surface in use (use count 2), Flutter's
   texture raises nothing, and Flutter has dropped the buffer by the time it
   takes the next. It checks on each present and every

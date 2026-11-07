@@ -89,7 +89,7 @@ abstract base class FrameTarget {
   void dispose();
 }
 
-/// A target whose texture shows a ring of [gpuSlotCount] images that the
+/// A target whose texture shows a ring of [slotCount] images that the
 /// session renders into, as on Windows, Linux, iOS, and macOS.
 ///
 /// Where the plugin copies each finished frame on the GPU before
@@ -119,6 +119,10 @@ abstract base class RingTarget extends FrameTarget {
 
   /// Whether Flutter may still sample [slot]. Only asked when [holdsFrames].
   bool slotInUse(int slot) => false;
+
+  /// How many images the ring has: [gpuSlotCount] unless a platform needs
+  /// more.
+  int get slotCount => gpuSlotCount;
 
   /// Gives the session a ring of images at [extent]. Every frame was
   /// released before.
@@ -191,7 +195,7 @@ abstract base class RingTarget extends FrameTarget {
   /// waits for a free slot to render the next frame. With a slot free, the
   /// next present releases what it can, and an idle map polls nothing.
   void _scheduleRecycle() {
-    if (_recycler != null || _held.length < gpuSlotCount) return;
+    if (_recycler != null || _held.length < slotCount) return;
     _recycler = Timer.periodic(_recycleInterval, (timer) {
       if (host?.disposed ?? true) {
         timer.cancel();
@@ -199,7 +203,7 @@ abstract base class RingTarget extends FrameTarget {
         return;
       }
       host!.onGpuQueue(() async => _releaseHeld()).ignore();
-      if (_held.length < gpuSlotCount) {
+      if (_held.length < slotCount) {
         timer.cancel();
         _recycler = null;
       }
