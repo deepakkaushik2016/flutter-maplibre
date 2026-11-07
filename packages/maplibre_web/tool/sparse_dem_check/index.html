@@ -23,15 +23,13 @@ function grid(apex) {
   }
   return { type: 'MultiLineString', coordinates: lines };
 }
-// A new style with the same tiles under another source id, so gl-js loads them anew: as
-// map_state.dart sets a style.
+// A new style whose source has the same id and tile URLs but another attribution, so gl-js loads
+// it anew while the sparse-dem routing sees no change of the source: only the style set itself can
+// forget the empty tiles. As map_state.dart sets a style.
 window.setDemStyle = async () => {
   sparseDem.styleSet();
   const style = map.getStyle();
-  style.sources.terrain2 = style.sources.terrain;
-  delete style.sources.terrain;
-  for (const layer of style.layers) if (layer.source === 'terrain') layer.source = 'terrain2';
-  style.terrain.source = 'terrain2';
+  style.sources.terrain.attribution = 'a new tileset under the same URLs';
   map.setStyle(style);
   map.triggerRepaint();
   await idle();

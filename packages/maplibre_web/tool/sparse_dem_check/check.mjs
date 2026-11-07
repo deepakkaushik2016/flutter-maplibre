@@ -91,7 +91,8 @@ for (const zoom of [13.5, 15.5]) {
     check(timeouts === 0, `${scene}: idle after every move (${timeouts} timeouts)`);
     if (mode === 'sparse204' && zoom === 15.5) {
       // A style set forgets the empty tiles the page knew: they may be another tileset's now. The
-      // new style has the same tiles under another source id, so gl-js asks for them again.
+      // new style changes only the source's attribution: gl-js loads it anew, and only the style
+      // set clears what the routing knew.
       const before = deep(mode).reduce((a, [, n]) => a + n, 0);
       await page.evaluate(() => window.setDemStyle());
       const after = deep(mode).reduce((a, [, n]) => a + n, 0);
