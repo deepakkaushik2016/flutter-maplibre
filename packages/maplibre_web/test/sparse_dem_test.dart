@@ -140,6 +140,78 @@ void main() {
     });
   });
 
+  group('RasterDemTiles follows the sources', () {
+    const template = 'https://example.com/dem/{z}/{x}/{y}.png';
+    const tile = 'https://example.com/dem/13/1/2.png';
+    final now = DateTime.utc(2026, 11, 6);
+
+    test('forgets the empty tiles when a source changes or goes', () {
+      final tiles = RasterDemTiles()
+        ..setSource('terrain', 'raster-dem', [template]);
+      knownEmptyTiles
+        ..clear()
+        ..add(tile, now);
+      // The same templates again (a repeated metadata event): kept.
+      tiles.setSource('terrain', 'raster-dem', [template]);
+      expect(knownEmptyTiles.length, 1);
+      // Another tileset under the same id: forgotten.
+      tiles.setSource('terrain', 'raster-dem', [
+        'https://example.com/dem-v2/{z}/{x}/{y}.png',
+      ]);
+      expect(knownEmptyTiles.length, 0);
+      expect(tiles.route(tile, 'Tile'), isNull);
+
+      knownEmptyTiles.add(tile, now);
+      tiles.removeSource('terrain');
+      expect(knownEmptyTiles.length, 0);
+      expect(tiles.sourceIds, isEmpty);
+    });
+
+    test('routes only live raster-dem sources after a style change', () {
+      final tiles = RasterDemTiles()
+        ..setSource('terrain', 'raster-dem', [template])
+        ..setSource('gone', 'raster-dem', ['https://other.com/{z}/{x}/{y}']);
+      // The new style has `terrain` as a raster source of the same URLs,
+      // and no `gone`.
+      final raster = JSObject()
+        ..setProperty('type'.toJS, 'raster'.toJS)
+        ..setProperty('tiles'.toJS, [template.toJS].toJS);
+      tiles.refresh((id) => id == 'terrain' ? raster : null);
+      expect(tiles.route(tile, 'Tile'), isNull);
+      expect(tiles.route('https://other.com/1/0/0', 'Tile'), isNull);
+      expect(tiles.sourceIds, isEmpty);
+    });
+
+    test('resolves relative templates against the TileJSON', () {
+      final tiles = RasterDemTiles()
+        ..setSource('terrain', 'raster-dem', [
+          '{z}/{x}/{y}.png',
+        ], base: 'https://example.com/dem/tiles.json');
+      expect(tiles.route(tile, 'Tile'), isNotNull);
+      final jsSource = JSObject()
+        ..setProperty('type'.toJS, 'raster-dem'.toJS)
+        ..setProperty('url'.toJS, 'https://example.com/a/tiles.json'.toJS)
+        ..setProperty('tiles'.toJS, ['/dem/{z}/{x}/{y}.png'.toJS].toJS);
+      tiles.setJsSource('other', jsSource);
+      expect(tiles.route(tile, 'Tile'), isNotNull);
+    });
+
+    test('a placeholder other than z, x, y stays within a path segment', () {
+      final tiles = RasterDemTiles()
+        ..setSource('terrain', 'raster-dem', [
+          'https://example.com/{prefix}/{z}/{x}/{y}.png',
+        ]);
+      expect(
+        tiles.route('https://example.com/ab/1/0/0.png', 'Tile'),
+        isNotNull,
+      );
+      expect(
+        tiles.route('https://example.com/ab/cd/1/0/0.png', 'Tile'),
+        isNull,
+      );
+    });
+  });
+
   group('KnownEmptyTiles', () {
     final now = DateTime.utc(2026, 11, 6, 12);
 
@@ -165,6 +237,19 @@ void main() {
         now.add(const Duration(minutes: 1)),
       );
       expect(KnownEmptyTiles.expiry(now, expires: '0'), now);
+    });
+
+    test('drops the expired answers first at its cap', () {
+      final tiles = KnownEmptyTiles()..add('kept', now);
+      for (var i = 0; tiles.length < KnownEmptyTiles.maxEntries; i++) {
+        tiles.add('t$i', now, cacheControl: 'max-age=60');
+      }
+      tiles.add('new', now.add(const Duration(minutes: 2)));
+      expect(
+        tiles.contains('kept', now.add(const Duration(minutes: 2))),
+        isTrue,
+      );
+      expect(tiles.length, 2);
     });
 
     test('holds an answer until it expires, and stays bounded', () {

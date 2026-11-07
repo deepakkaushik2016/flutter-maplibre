@@ -93,6 +93,7 @@ cd tool/codegen && dart run jnigen.dart       # after changing MaplibreNativeApi
 cd tool/codegen && dart run style_layers.dart # after raising the style spec version in the script
 cd examples && dart run tool/alps_dem.dart     # after changing the heights in integration_test/shared/alps_dem.dart
 packages/maplibre_native/linux/test/run_gl_texture_test.sh  # Linux zero-copy check, no Flutter build needed
+cd packages/maplibre_web && SPARSE_DEM_TOOLS=<dir> tool/sparse_dem_check/run.sh  # terrain over a sparse raster-dem tileset in headless Chromium, against the pinned maplibre-gl; installs playwright and Chromium into <dir> only
 ```
 
 Building the C library locally is covered in `CONTRIBUTING.md`: name the

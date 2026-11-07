@@ -592,6 +592,17 @@ Each entry: the decision, then why.
   gl-js retrying an errored tile costs no request; and it asks each map for
   a frame after an empty answer, as gl-js draws none for a 404 and so never
   fired `idle` when that tile was the last one loading.
+  The routing follows the live sources: a source's templates are taken on
+  its metadata event (a relative template against its TileJSON's URL), and
+  checked again on every style data event, so a removed source, or one
+  replaced by a non-DEM source of the same id, is no longer routed;
+  `removeSource` and `setTiles` update them at once. A style set, and a
+  source whose templates change or go, clear the empty tiles the page knew.
+  A placeholder other than `{z}`, `{x}`, `{y}` matches within one path
+  segment. `tool/sparse_dem_check/run.sh` checks it all in headless
+  Chromium against the maplibre-gl version pinned in its `package.json`
+  (the one `defaultMapLibreGlVersion` resolves to): raise the pin, and run
+  it, when gl-js changes how it covers a missing tile.
 
 ## Gestures
 

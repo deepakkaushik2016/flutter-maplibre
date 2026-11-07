@@ -3,9 +3,12 @@ part of 'map_state.dart';
 /// Web specific implementation of the [StyleController].
 class StyleControllerWeb extends StyleController implements StyleBackend {
   /// Create a new [StyleControllerWeb] instance.
-  StyleControllerWeb(this._map, this._deferredTerrain);
+  StyleControllerWeb(this._map, this._deferredTerrain, this._rasterDemTiles);
 
   final interop.JsMap _map;
+
+  /// The raster-dem tiles of the map's sources (see `sparse_dem.dart`).
+  final RasterDemTiles _rasterDemTiles;
 
   /// Holds a terrain set while the map loads a new style.
   final DeferredTerrain _deferredTerrain;
@@ -137,6 +140,7 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
   Future<void> removeSource(String id) async {
     // Removing a source the style lacks is not an error on other platforms.
     if (_map.getSource(id) != null) _map.removeSource(id);
+    _rasterDemTiles.removeSource(id);
     if (_blobUrls.remove(id) case final String url) {
       URL.revokeObjectURL(url);
     }
@@ -159,7 +163,11 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
     String id,
     List<String> tiles,
     Map<String, Object?> specification,
-  ) async => _map.getSource(id)!.setTiles(tiles.jsify()!);
+  ) async {
+    _map.getSource(id)!.setTiles(tiles.jsify()!);
+    // Its tiles may be another tileset's now.
+    _rasterDemTiles.setJsSource(id, _map.getSource(id));
+  }
 
   @override
   Future<void> setTileJsonUrl(

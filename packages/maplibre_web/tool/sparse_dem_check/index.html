@@ -1,0 +1,92 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="/gl/maplibre-gl.css">
+<style>html,body{margin:0}#map{width:400px;height:600px}</style></head>
+<body><div id="map"></div>
+<script src="/sparse_dem.js"></script>
+<script type="module">
+import * as maplibregl from '/gl/maplibre-gl.mjs';
+window.maplibregl = maplibregl;
+sparseDem.register();
+let map;
+window.timeouts = [];
+const idle = (label = 'idle') => new Promise((r) => {
+  const t = setTimeout(() => { window.timeouts.push(label); r(); }, 15000);
+  map.once('idle', () => { clearTimeout(t); r(); });
+});
+function grid(apex) {
+  const kmPerDegree = 6371.0088 * Math.PI / 180, kmPerLng = kmPerDegree * Math.cos(apex[1] * Math.PI / 180);
+  const lines = [];
+  for (let i = -60; i <= 60; i++) {
+    const km = i * 0.25, lat = apex[1] + km / kmPerDegree, lng = apex[0] + km / kmPerLng;
+    lines.push([[apex[0] - 15 / kmPerLng, lat], [apex[0] + 15 / kmPerLng, lat]]);
+    lines.push([[lng, apex[1] - 15 / kmPerDegree], [lng, apex[1] + 15 / kmPerDegree]]);
+  }
+  return { type: 'MultiLineString', coordinates: lines };
+}
+// A new style with the same tiles under another source id, so gl-js loads them anew: as
+// map_state.dart sets a style.
+window.setDemStyle = async () => {
+  sparseDem.styleSet();
+  const style = map.getStyle();
+  style.sources.terrain2 = style.sources.terrain;
+  delete style.sources.terrain;
+  for (const layer of style.layers) if (layer.source === 'terrain') layer.source = 'terrain2';
+  style.terrain.source = 'terrain2';
+  map.setStyle(style);
+  map.triggerRepaint();
+  await idle();
+};
+window.makeMap = async ({ mode, terrain = true, center, zoom, pitch, apex, fix = false, elevation = null }) => {
+  if (map) { map.remove(); }
+  const style = {
+    version: 8,
+    sources: {
+      terrain: { type: 'raster-dem', tiles: [location.origin + `/t/${mode}/{z}/{x}/{y}.png`], encoding: 'terrarium', maxzoom: 14, tileSize: 512 },
+      grid: { type: 'geojson', data: grid(apex) },
+    },
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': '#dddddd' } },
+      { id: 'relief', type: 'color-relief', source: 'terrain', paint: { 'color-relief-color': ['interpolate', ['linear'], ['elevation'], 0, 'rgb(20, 60, 160)', 400, 'rgb(20, 120, 40)', 2400, 'rgb(150, 90, 30)'] } },
+      { id: 'hillshade', type: 'hillshade', source: 'terrain', paint: { 'hillshade-exaggeration': 0.4 } },
+      { id: 'grid', type: 'line', source: 'grid', paint: { 'line-color': 'black', 'line-width': 2 } },
+    ],
+  };
+  if (terrain) style.terrain = { source: 'terrain', exaggeration: 1 };
+  window.errors = [];
+  map = new maplibregl.Map({ container: 'map', style, center, zoom, pitch, bearing: 0, fadeDuration: 0,
+    ...(elevation !== null ? { centerClampedToGround: false, elevation } : {}),
+    canvasContextAttributes: { preserveDrawingBuffer: true, antialias: false }, attributionControl: false,
+    ...(fix ? { transformRequest: sparseDem.transformRequest } : {}) });
+  // As map_state.dart wires a map.
+  if (fix) {
+    sparseDem.onEmptyTile(map);
+    map.on('data', (e) => {
+      if (e.dataType === 'style') sparseDem.refresh(map);
+      if (e.sourceDataType === 'metadata' && e.sourceId) sparseDem.setSource(map, e.sourceId);
+    });
+  }
+  map.on('error', (e) => window.errors.push(String(e.error?.message || e.error || e)));
+  window.map = map;
+  await idle();
+};
+window.easeTo = async (zoom) => {
+  map.easeTo({ zoom, duration: 1000 });
+  await new Promise((r) => map.once('moveend', r));
+  map.triggerRepaint();
+  await idle();
+};
+window.jumpTo = async (opts) => { map.jumpTo(opts); map.triggerRepaint(); await idle(); };
+window.query = (points) => points.map((p) => {
+  const e = map.queryTerrainElevation(p);
+  const s = map.terrain ? map.terrain.getElevationAndDEMStateForLngLat(new maplibregl.LngLat(p[0], p[1]), Math.max(0, Math.floor(map.getZoom()))) : null;
+  return { e, state: s && s.demState };
+});
+window.pixels = () => {
+  const gl = map.painter.context.gl;
+  const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(w * h * 4);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  return { w, h, data: Array.from(px) };
+};
+window.renderedDEMTiles = () => map.style.tileManagers.terrain._inViewTiles.getAllTiles().map((t) => `${t.tileID.canonical.z}/${t.tileID.canonical.x}/${t.tileID.canonical.y}:${t.state}:${t.dem ? "dem" : "-"}`).sort();
+window.ready = true;
+</script></body></html>

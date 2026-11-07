@@ -1,0 +1,9 @@
+{
+  "name": "maplibre-web-sparse-dem-check",
+  "private": true,
+  "description": "The versions run.sh installs into $SPARSE_DEM_TOOLS: maplibre-gl is the version maplibre_web resolves (defaultMapLibreGlVersion) and has been checked with.",
+  "dependencies": {
+    "maplibre-gl": "6.16.0",
+    "playwright": "1.56.1"
+  }
+}

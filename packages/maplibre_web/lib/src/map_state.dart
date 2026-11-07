@@ -127,7 +127,12 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
           attributionControl: false,
           // MapGestureDetector handles the input.
           interactive: false,
-          transformRequest: _transformRequest.toJS,
+          // MapLibreNetwork first, then the sparse-dem routing of raster-dem
+          // tiles, which fetches the transformed request.
+          transformRequest:
+              ((String url, String? resourceType) => _rasterDemTiles
+                      .transformRequest(url, resourceType, _transformRequest))
+                  .toJS,
           centerClampedToGround: options.centerClampedToGround,
         ),
       );
@@ -209,6 +214,11 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
               event.sourceDataType == 'metadata' ||
               event.sourceDataType == 'visibility') {
             _onAttributionsMaybeChanged();
+          }
+          // A style change may have removed or replaced a source, whose
+          // tiles then no longer load through the sparse-dem protocol.
+          if (event.dataType == 'style') {
+            _rasterDemTiles.refresh(_map.getSource);
           }
           if (event.sourceDataType == 'metadata') {
             style?.refreshTileJson();
@@ -888,8 +898,11 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     }.toJS;
     _map.once(interop.MapEventType.styleLoad, listener);
     final before = _map.style;
+    // The empty tiles the page knew may be another tileset's in this style.
+    knownEmptyTiles.clear();
     _map.setStyle(_jsStyle(style));
     _onLoadingStarted();
+    _rasterDemTiles.refresh(_map.getSource);
     // gl-js diffs a JSON style at once. A diff without changes, or a style
     // that fails to validate, keeps the loaded style and fires no
     // `style.load`, so the terrain set meanwhile goes to that style. Before
@@ -951,7 +964,11 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   void _onStyleLoaded(int generation) {
     layerManager = null;
     style?.dispose();
-    final styleCtrl = StyleControllerWeb(_map, _deferredTerrain)..load();
+    final styleCtrl = StyleControllerWeb(
+      _map,
+      _deferredTerrain,
+      _rasterDemTiles,
+    )..load();
     style = styleCtrl;
     // Applied at once, as the style has loaded, so the futures of setTerrain
     // complete before the events below; a failure goes to them.

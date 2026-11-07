@@ -35,40 +35,85 @@ import 'package:web/web.dart' as web;
 const sparseDemProtocol = 'sparse-dem';
 const _prefix = '$sparseDemProtocol://';
 
-/// The raster-dem tile URL templates of a map's sources, by source id, so
-/// that [route] can tell a raster-dem tile's URL from another tile's.
+/// The raster-dem tile URL templates of a map's live sources, by source id,
+/// so that [route] can tell a raster-dem tile's URL from another tile's.
+///
+/// It follows the sources: [setJsSource] on each source's metadata event,
+/// [refresh] after a style change, [removeSource] when one is removed. A
+/// source whose templates change or go forgets the empty tiles the page
+/// knew ([knownEmptyTiles]): they may belong to another tileset now.
 class RasterDemTiles {
+  final _templates = <String, List<String>>{};
   final _patterns = <String, List<RegExp>>{};
 
   /// Takes the tile URL templates of the source [id] when it is a raster-dem
   /// source, and forgets the source's templates otherwise.
   ///
-  /// Only http and https templates are taken: a tile of another protocol
-  /// (`pmtiles://`, say) loads through that protocol, as before.
-  void setSource(String id, String? type, Iterable<String> templates) {
-    final patterns = [
+  /// A relative template is taken relative to [base] (the TileJSON's URL, or
+  /// the page's), as the browser resolves the URLs gl-js asks for. Only http
+  /// and https templates are taken: a tile of another protocol (`pmtiles://`,
+  /// say) loads through that protocol, as before.
+  void setSource(
+    String id,
+    String? type,
+    Iterable<String> templates, {
+    String? base,
+  }) {
+    final absolute = [
       if (type == 'raster-dem')
         for (final template in templates)
-          if (template.startsWith('http://') || template.startsWith('https://'))
-            _pattern(template),
+          if (_absolute(template, base) case final url?)
+            if (url.startsWith('http://') || url.startsWith('https://')) url,
     ];
-    if (patterns.isEmpty) {
+    final previous = _templates[id];
+    if (previous != null &&
+        previous.length == absolute.length &&
+        Iterable<int>.generate(absolute.length)
+            .every((i) => previous[i] == absolute[i])) {
+      return;
+    }
+    if (previous != null) knownEmptyTiles.clear();
+    if (absolute.isEmpty) {
+      _templates.remove(id);
       _patterns.remove(id);
     } else {
-      _patterns[id] = patterns;
+      _templates[id] = absolute;
+      _patterns[id] = [for (final url in absolute) _pattern(url)];
     }
   }
 
-  /// Takes the templates of the gl-js source [source] (`map.getSource(id)`),
-  /// which holds them once its TileJSON has loaded.
+  /// Takes the templates of the gl-js source [source] (`map.getSource(id)`,
+  /// null when the map has no such source), which holds them once its
+  /// TileJSON has loaded.
   void setJsSource(String id, JSObject? source) {
     final tiles = source?.getProperty<JSAny?>('tiles'.toJS);
-    setSource(id, source?.getProperty<JSString?>('type'.toJS)?.toDart, [
-      if (tiles != null && tiles.isA<JSArray>())
-        for (final tile in (tiles as JSArray<JSAny?>).toDart)
-          if (tile != null && tile.isA<JSString>()) (tile as JSString).toDart,
-    ]);
+    setSource(
+      id,
+      source?.getProperty<JSString?>('type'.toJS)?.toDart,
+      [
+        if (tiles != null && tiles.isA<JSArray>())
+          for (final tile in (tiles as JSArray<JSAny?>).toDart)
+            if (tile != null && tile.isA<JSString>()) (tile as JSString).toDart,
+      ],
+      base:
+          source?.getProperty<JSString?>('url'.toJS)?.toDart ??
+          web.window.location.href,
+    );
   }
+
+  /// Forgets the source [id].
+  void removeSource(String id) => setSource(id, null, const []);
+
+  /// Checks every source it holds against the map's live sources
+  /// (`getSource(id)`, null when gone), after the style changed.
+  void refresh(JSObject? Function(String id) getSource) {
+    for (final id in _templates.keys.toList()) {
+      setJsSource(id, getSource(id));
+    }
+  }
+
+  /// The ids of the sources it routes the tiles of.
+  Iterable<String> get sourceIds => _templates.keys;
 
   /// The URL that gl-js loads [url] from: through [sparseDemProtocol] when
   /// it is a tile of a raster-dem source, otherwise null (unchanged).
@@ -99,9 +144,28 @@ class RasterDemTiles {
       ..setProperty('url'.toJS, '$_prefix$target'.toJS);
   }
 
+  /// [template] made absolute against [base]; null when it can't be.
+  static String? _absolute(String template, String? base) {
+    if (template.startsWith('http://') || template.startsWith('https://')) {
+      return template;
+    }
+    if (base == null) return null;
+    try {
+      // Uri escapes the braces of the placeholders: put them back.
+      return Uri.parse(base)
+          .resolve(template)
+          .toString()
+          .replaceAll('%7B', '{')
+          .replaceAll('%7D', '}');
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// A tile URL template as a pattern that matches the URLs gl-js makes of
   /// it: `{z}`, `{x}`, `{y}` are numbers, and any other placeholder
-  /// (`{ratio}`, `{quadkey}`, `{bbox-epsg-3857}`, `{prefix}`) is any text.
+  /// (`{ratio}`, `{quadkey}`, `{bbox-epsg-3857}`, `{prefix}`) is any text
+  /// within one path segment.
   static RegExp _pattern(String template) {
     final pattern = StringBuffer('^');
     var rest = template;
@@ -113,7 +177,7 @@ class RasterDemTiles {
         ..write(RegExp.escape(rest.substring(0, match.start)))
         ..write(switch (match[0]) {
           '{z}' || '{x}' || '{y}' => r'\d+',
-          _ => '.*?',
+          _ => '[^/]*?',
         });
       rest = rest.substring(match.end);
     }
@@ -127,8 +191,8 @@ class RasterDemTiles {
 /// The tile URLs that answered empty, with when that answer expires (null:
 /// it holds for the session).
 ///
-/// Bounded: past [maxEntries] it starts over, which costs at most one more
-/// request per tile. An entry is a URL and a date, a few hundred bytes, so
+/// Bounded: past [maxEntries] the expired entries go, and if that is not
+/// enough it starts over, which costs at most one more request per tile. An entry is a URL and a date, a few hundred bytes, so
 /// some 1 MB at most.
 class KnownEmptyTiles {
   /// The most URLs held.
@@ -138,6 +202,10 @@ class KnownEmptyTiles {
 
   /// How many URLs are held.
   int get length => _entries.length;
+
+  /// Forgets every URL: the style or a source changed, and the URLs may
+  /// belong to another tileset now.
+  void clear() => _entries.clear();
 
   /// Whether [url] answered empty, and that answer still holds at [now].
   bool contains(String url, DateTime now) {
@@ -156,7 +224,12 @@ class KnownEmptyTiles {
   void add(String url, DateTime now, {String? cacheControl, String? expires}) {
     final until = expiry(now, cacheControl: cacheControl, expires: expires);
     if (_entries.length >= maxEntries && !_entries.containsKey(url)) {
-      _entries.clear();
+      // The expired entries go first; the record starts over only when
+      // they are not enough.
+      _entries.removeWhere(
+        (_, expires) => expires != null && !expires.isAfter(now),
+      );
+      if (_entries.length >= maxEntries) _entries.clear();
     }
     _entries[url] = until;
   }
