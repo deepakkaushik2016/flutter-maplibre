@@ -57,6 +57,12 @@
   `MapController.toScreenLocationOnTerrain` convert between screen points
   and the ground that the terrain draws, and tell whether nearer ground
   hides a point, on web and native.
+- 3D terrain over a sparse raster-dem tileset, one that answers the tiles it
+  does not have with `204 No Content` or a 404: such a tile is drawn and
+  queried from its nearest ancestor with data, on web as on native.
+  maplibre-gl-js drew a 204 tile two or more zooms past the data from a z5
+  tile. An empty tile is asked for once a session (or until its
+  `Cache-Control` or `Expires` lapses), on web and native.
 
 ### Performance
 

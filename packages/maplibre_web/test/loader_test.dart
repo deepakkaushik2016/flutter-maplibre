@@ -51,9 +51,9 @@ void main() {
 
     await loadMapLibreGlJs();
 
-    expect(_protocols.toDart.map((e) => e.toDart), ['pmtiles']);
+    expect(_protocols.toDart.map((e) => e.toDart), ['sparse-dem', 'pmtiles']);
     // Every map waits for the same load.
     await loadMapLibreGlJs();
-    expect(_protocols.length, 1);
+    expect(_protocols.length, 2);
   });
 }

@@ -19,6 +19,7 @@ import 'package:maplibre_web/src/frame_sync.dart';
 import 'package:maplibre_web/src/interop/interop.dart' as interop;
 import 'package:maplibre_web/src/interop/json.dart';
 import 'package:maplibre_web/src/loader.dart';
+import 'package:maplibre_web/src/sparse_dem.dart';
 import 'package:web/web.dart' hide PointerEvent;
 
 part 'style_controller.dart';
@@ -38,6 +39,17 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   _WebCameraAnimation? _animation;
   var _animationIds = 0;
   final _cameraPaddingReset = CameraPaddingReset();
+
+  /// The raster-dem tiles of the map's sources, which load through the
+  /// sparse-dem protocol (see `sparse_dem.dart`).
+  final _rasterDemTiles = RasterDemTiles();
+
+  /// Asks the map for a frame after an empty raster-dem tile, so that it
+  /// fires `idle` (see `emptyTileListeners`).
+  void _onEmptyTile() {
+    if (_mapCreated) _map.triggerRepaint();
+  }
+
   bool _nextGestureCausedByController = false;
 
   /// Holds a terrain set while [_setStyle] loads a style.
@@ -120,6 +132,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
         ),
       );
       _mapCreated = true;
+      emptyTileListeners.add(_onEmptyTile);
 
       document.body?.appendChild(_htmlElement);
       // Invoke the onMapCreated callback async to avoid getting it called
@@ -197,7 +210,14 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
               event.sourceDataType == 'visibility') {
             _onAttributionsMaybeChanged();
           }
-          if (event.sourceDataType == 'metadata') style?.refreshTileJson();
+          if (event.sourceDataType == 'metadata') {
+            style?.refreshTileJson();
+            // The source's tile URLs, from its TileJSON, before gl-js asks
+            // for a tile.
+            if (event.sourceId case final String id) {
+              _rasterDemTiles.setJsSource(id, _map.getSource(id));
+            }
+          }
         }.toJS,
       );
       _map.on(
@@ -419,6 +439,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     _contextMenuTimer?.cancel();
     _deferredTerrain.dispose();
     style?.dispose();
+    emptyTileListeners.remove(_onEmptyTile);
     if (_mapCreated) {
       _map.remove();
       _htmlElement.remove();

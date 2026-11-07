@@ -5,6 +5,7 @@ import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_web/src/interop/interop.dart' as interop;
 import 'package:maplibre_web/src/interop/pmtiles.dart' as pmtiles;
+import 'package:maplibre_web/src/sparse_dem.dart';
 import 'package:web/web.dart';
 
 /// The maplibre-gl-js version that is loaded if the app doesn't name one.
@@ -59,6 +60,8 @@ Future<void> _load() async {
   // as it is.
   final pmtilesLoaded = _loadPmtiles();
   await _loadMapLibreGl();
+  // Raster-dem tiles load through it: see sparse_dem.dart.
+  interop.addProtocol(sparseDemProtocol, sparseDemLoad.toJS);
   if (await pmtilesLoaded) {
     try {
       interop.addProtocol('pmtiles', pmtiles.Protocol().tile);

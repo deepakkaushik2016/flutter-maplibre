@@ -574,6 +574,24 @@ Each entry: the decision, then why.
   is asynchronous and `StyleController.terrain` is not, so the controller
   takes it from the loaded style JSON it already reads on load and from each
   `setTerrain`; reading it costs no call. Web reads `map.getTerrain()`.
+- **On web, raster-dem tiles load through the `sparse-dem` protocol
+  (`maplibre_web/lib/src/sparse_dem.dart`), which answers an empty tile
+  (204, or an empty body) with a 404.** A sparse terrain tileset answers the
+  tiles it does not have with 204, and the client draws them from the nearest
+  ancestor with data. gl-js 6.16 takes a raster-dem tile that loaded empty as
+  having data (`Tile.hasData`) and never climbs to its parents: the terrain
+  gets heights only from the one parent `_addTerrainIdealTiles` adds and a z5
+  tile, so two empty zooms (z14 and z13 at map zoom 15) drew the terrain from
+  z5. gl-js covers a 404 quietly (no `error` event) with a loaded ancestor,
+  overzoomed on the GPU, which costs nothing per tile; a parent tile made in
+  the browser from the ancestor's heights would cost a decode and a resample
+  per tile and keep both in memory. The map's `transformRequest` routes only
+  http(s) tiles of raster-dem sources, matched against their URL templates
+  as each source's metadata arrives. The protocol remembers the empty tiles
+  for the session, or until their `Cache-Control` or `Expires` lapses, so
+  gl-js retrying an errored tile costs no request; and it asks each map for
+  a frame after an empty answer, as gl-js draws none for a 404 and so never
+  fired `idle` when that tile was the last one loading.
 
 ## Gestures
 

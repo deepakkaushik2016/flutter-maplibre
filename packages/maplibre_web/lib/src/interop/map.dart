@@ -154,6 +154,9 @@ extension type JsMap._(Camera _) implements Camera {
   /// Get a Source by its id.
   external SourceSpecification? getSource(String id);
 
+  /// Asks for a frame.
+  external void triggerRepaint();
+
   /// The style object of the map. A style swap that gl-js applies as a diff
   /// keeps it.
   external JSObject? get style;
