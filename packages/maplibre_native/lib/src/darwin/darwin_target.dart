@@ -17,10 +17,17 @@ final GpuSyncKindFlag darwinProducerSyncKinds =
 
 /// The `MTLSharedEvent` that the plugin waits for before it shows a frame
 /// handed over with a producer sync of [kind] and [handle], or 0 for a frame
-/// complete on the CPU, which the plugin shows at once.
+/// complete on the CPU, which the plugin shows at once. Throws for a
+/// shared-event sync without an event, so that such a frame is never shown
+/// as complete.
 @visibleForTesting
-int darwinFrameEvent(GpuSyncKind kind, int handle) =>
-    kind == GpuSyncKind.metalSharedEvent ? handle : 0;
+int darwinFrameEvent(GpuSyncKind kind, int handle) {
+  if (kind != GpuSyncKind.metalSharedEvent) return 0;
+  if (handle == 0) {
+    throw StateError('The frame waits for a shared event but has none');
+  }
+  return handle;
+}
 
 /// Creates the target of an iOS or macOS map, which renders on its session's
 /// core worker through Metal into a ring of BGRA8 IOSurfaces that the C
@@ -98,6 +105,11 @@ final class _IoSurfaceRingTarget extends LibraryRingTarget {
     var slot = 0;
     final present = frame.withIoSurface((view) {
       slot = view.slot;
+      // Before the plugin arms the present, which it would then show with no
+      // entry here to report it.
+      if (!_pending.holds(slot)) {
+        throw StateError('Slot $slot is beyond the ring of $slotCount');
+      }
       return frame.withProducerSync(
         (sync) => DarwinPlugin.presentGpuTexture(
           textureId,

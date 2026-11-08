@@ -13,7 +13,11 @@ final class PendingPresents<T extends Object> {
   final List<int> _presents;
   final List<T?> _values;
 
-  /// Records the present numbered [present] in [slot], with [value].
+  /// Whether the table has room for a present in [slot].
+  bool holds(int slot) => slot >= 0 && slot < _presents.length;
+
+  /// Records the present numbered [present] in [slot], which [holds], with
+  /// [value].
   void add(int slot, int present, T value) {
     _presents[slot] = present;
     _values[slot] = value;
@@ -22,7 +26,7 @@ final class PendingPresents<T extends Object> {
   /// Takes the value of the present numbered [present] in [slot], or null
   /// when the slot holds another present or none.
   T? settle(int slot, int present) {
-    if (slot < 0 || slot >= _presents.length || _presents[slot] != present) {
+    if (!holds(slot) || _presents[slot] != present) {
       return null;
     }
     final value = _values[slot];

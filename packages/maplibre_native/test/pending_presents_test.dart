@@ -32,6 +32,14 @@ void main() {
       expect(presents.settle(3, 2), isNull);
     });
 
+    test('holds only the slots of its ring', () {
+      final presents = PendingPresents<String>(4);
+      expect(presents.holds(0), isTrue);
+      expect(presents.holds(3), isTrue);
+      expect(presents.holds(4), isFalse);
+      expect(presents.holds(-1), isFalse);
+    });
+
     test('a slot outside the ring settles nothing', () {
       final presents = PendingPresents<String>(4);
       expect(presents.settle(4, 1), isNull);

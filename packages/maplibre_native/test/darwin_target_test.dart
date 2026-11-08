@@ -23,5 +23,14 @@ void main() {
     test('shows a CPU-complete frame at once', () {
       expect(darwinFrameEvent(GpuSyncKind.cpuComplete, 0x1234), 0);
     });
+
+    test('never shows a shared-event frame without its event at once', () {
+      // A null event means "complete" to the plugin, so a frame that should
+      // wait for one must not be presented at all.
+      expect(
+        () => darwinFrameEvent(GpuSyncKind.metalSharedEvent, 0),
+        throwsStateError,
+      );
+    });
   });
 }
