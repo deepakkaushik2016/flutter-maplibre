@@ -216,8 +216,8 @@ Each entry: the decision, then why.
   ring. `IOSurfaceIsInUse` can't tell: the ring's
   own buffer and texture keep every surface in use (use count 2), Flutter's
   texture raises nothing, and Flutter has dropped the buffer by the time it
-  takes the next. It checks on each present, on each settle, and every
-  4 ms while a replaced frame is held. A resize releases every held frame
+  takes the next. It checks on each present and on each settle, and every
+  4 ms only while every slot is held. A resize releases every held frame
   before the session resizes; Flutter keeps the old buffer it shows, which
   retains its surface.
   This replaced a blit into a `CVPixelBufferPool` buffer that the Dart UI

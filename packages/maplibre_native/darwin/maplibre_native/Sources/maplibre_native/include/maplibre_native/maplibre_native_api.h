@@ -72,7 +72,10 @@ void maplibre_native_end_gpu_texture_ring(int64_t texture_id);
 bool maplibre_native_gpu_texture_slot_in_use(int64_t texture_id,
                                              uint32_t slot);
 
-// Unregisters a texture. Its presents never settle.
+// Unregisters a texture. Its presents never settle: the plugin calls the
+// frame-shown callback no more once this returns. A settle that it posted
+// before can still reach Dart after that, so the callback must ignore a
+// texture it disposed.
 void maplibre_native_dispose_texture(int64_t texture_id);
 
 #if defined(__cplusplus)
