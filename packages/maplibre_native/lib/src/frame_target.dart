@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:maplibre_native_ffi/maplibre_native_ffi.dart';
 
 /// Ring depth of a zero-copy texture: one slot Flutter shows, one MapLibre
@@ -39,6 +40,10 @@ abstract interface class FrameTargetHost {
 
   /// Asks for the map's next frame.
   void demandFrame();
+
+  /// Reports that Flutter shows [frame] next, for a target whose
+  /// [FrameTarget.present] shows frames later.
+  void showFrame(RenderFrameResult frame);
 }
 
 /// How the frames of one map reach Flutter: the Flutter texture, the render
@@ -81,9 +86,12 @@ abstract base class FrameTarget {
   /// Sizes the target and the session to [extent].
   Future<void> resize(RenderSessionHandle session, LogicalExtent extent);
 
-  /// Hands the frame the session rendered last to Flutter. Returns false when
-  /// there was none to hand over.
-  Future<bool> present(RenderSessionHandle session);
+  /// Hands the frame the session rendered last, whose result is [frame], to
+  /// Flutter. Returns true when Flutter shows it next, and false when there
+  /// was none to hand over or when Flutter shows it later, once its GPU work
+  /// ends: the target then reports it through [FrameTargetHost.showFrame],
+  /// or never when a newer frame was shown first.
+  Future<bool> present(RenderSessionHandle session, RenderFrameResult frame);
 
   /// Releases the session. A core-worker session detaches from its target
   /// there, off the UI thread, and the returned future completes once no
@@ -119,8 +127,14 @@ abstract base class RingTarget extends FrameTarget {
 
   Timer? _recycler;
 
-  /// Hands [frame] to Flutter and returns its slot in the ring.
-  int presentFrame(AcquiredFrameHandle frame);
+  /// Hands [frame], whose render result is [result], to Flutter and returns
+  /// its slot in the ring.
+  int presentFrame(AcquiredFrameHandle frame, RenderFrameResult result);
+
+  /// Whether Flutter shows a frame next once [presentFrame] returns. A target
+  /// that shows it later, once its GPU work ends, reports it through
+  /// [FrameTargetHost.showFrame] then.
+  bool get showsOnPresent => true;
 
   /// Whether Flutter may still sample [slot]. Only asked when [holdsFrames].
   bool slotInUse(int slot) => false;
@@ -154,16 +168,20 @@ abstract base class RingTarget extends FrameTarget {
     return resizeRing(session, extent);
   }
 
-  /// The frame's GPU writes completed before it became acquirable, so the
-  /// plugin can copy or sample it once [presentFrame] returns.
+  /// Unless the target attaches with other [attachOptions], the frame's GPU
+  /// writes completed before it became acquirable, so the plugin can copy or
+  /// sample it once [presentFrame] returns.
   @override
-  Future<bool> present(RenderSessionHandle session) async {
+  Future<bool> present(
+    RenderSessionHandle session,
+    RenderFrameResult result,
+  ) async {
     _releaseHeld();
     final frame = session.acquireFrame();
     if (frame == null) return false;
     final int slot;
     try {
-      slot = presentFrame(frame);
+      slot = presentFrame(frame, result);
     } on Object {
       frame.release(_cpuComplete);
       rethrow;
@@ -174,8 +192,13 @@ abstract base class RingTarget extends FrameTarget {
     }
     _held.add((slot, frame));
     _scheduleRecycle();
-    return true;
+    return showsOnPresent;
   }
+
+  /// Releases the replaced frames whose slots Flutter no longer samples, for
+  /// a target that learns that a slot may be free.
+  @protected
+  void releaseFreeFrames() => _releaseHeld();
 
   /// Releases the replaced frames whose slots Flutter no longer samples, or
   /// every held frame when [all] is set.

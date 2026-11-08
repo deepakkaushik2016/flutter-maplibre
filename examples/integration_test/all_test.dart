@@ -1,6 +1,7 @@
 import 'package:integration_test/integration_test.dart';
 
 import 'camera_test.dart' as camera;
+import 'darwin_texture_test.dart' as darwin_texture;
 import 'events_test.dart' as events;
 import 'features_test.dart' as features;
 import 'gestures_test.dart' as gestures;
@@ -39,4 +40,5 @@ void main() {
   offline.runTests();
   paused.runTests();
   unsupported.runTests();
+  darwin_texture.runTests();
 }

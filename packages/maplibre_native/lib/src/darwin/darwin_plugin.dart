@@ -4,6 +4,15 @@ import 'package:ffi/ffi.dart';
 import 'package:maplibre_native/src/darwin/bindings.g.dart';
 import 'package:maplibre_native/src/plugin_error.dart';
 
+/// Called by the plugin once a present settles, with the texture's id, the
+/// present's slot and number, and whether Flutter shows its frame next.
+typedef FrameShownCallback = Void Function(
+  Int64 textureId,
+  Uint32 slot,
+  Uint64 present,
+  Bool shown,
+);
+
 /// The maplibre_native iOS and macOS plugin, called through its C API in
 /// `darwin/maplibre_native/Sources/maplibre_native/include/maplibre_native/maplibre_native_api.h`.
 final class DarwinPlugin {
@@ -63,10 +72,15 @@ final class DarwinPlugin {
   }
 
   /// Registers a zero-copy texture that shows a ring of IOSurfaces, which
-  /// the C library allocates, and returns its Flutter texture id.
-  static int createGpuTexture() => using((arena) {
+  /// the C library allocates, and returns its Flutter texture id. Until
+  /// [disposeTexture] returns, the plugin calls [frameShown] once a present
+  /// of [presentGpuTexture] settles, from other threads.
+  static int createGpuTexture(
+    Pointer<NativeFunction<FrameShownCallback>> frameShown,
+  ) => using((arena) {
     final error = arena<Char>(pluginErrorSize);
     final id = _bindings.maplibre_native_create_gpu_texture(
+      frameShown,
       error,
       pluginErrorSize,
     );
@@ -74,33 +88,52 @@ final class DarwinPlugin {
     return id;
   });
 
-  /// Makes the finished frame in the IOSurfaceRef [surface], at [slot] of the
-  /// ring [ring], the one Flutter shows next, without a copy. The frame stays
-  /// acquired until [slotInUse] reports its slot free.
-  static void presentGpuTexture(
+  /// Makes the frame in the IOSurfaceRef [surface], at [slot] of the current
+  /// ring, the one Flutter shows next, without a copy, once the
+  /// `MTLSharedEvent` [event] reaches [value], or at once when [event] is 0.
+  /// The plugin retains the event, so it only needs to be valid during this
+  /// call, and doesn't wait for the GPU. Returns the present's number, which
+  /// the texture's frame-shown callback receives once the present settles.
+  /// The frame stays acquired until [slotInUse] reports its slot free.
+  static int presentGpuTexture(
     int textureId, {
-    required int ring,
     required int slot,
     required int surface,
-  }) => using((arena) {
-    final error = arena<Char>(pluginErrorSize);
+    required int event,
+    required int value,
+  }) {
+    // Called for every frame, so it reuses buffers of its own; the C API is
+    // only called from the UI isolate.
     if (!_bindings.maplibre_native_present_gpu_texture(
       textureId,
-      ring,
       slot,
       Pointer.fromAddress(surface),
-      error,
+      event,
+      value,
+      _present,
+      _presentError,
       pluginErrorSize,
     )) {
-      throw StateError(_message(error));
+      throw StateError(_message(_presentError));
     }
-  });
+    return _present.value;
+  }
+
+  static final Pointer<Uint64> _present = calloc<Uint64>();
+  static final Pointer<Char> _presentError = calloc<Char>(pluginErrorSize);
+
+  /// Ends a texture's current ring, before the session resizes: its presents
+  /// that wait for their GPU work never settle, and no slot of the next ring
+  /// is in use.
+  static void endRing(int textureId) =>
+      _bindings.maplibre_native_end_gpu_texture_ring(textureId);
 
   /// Whether Flutter may still sample [slot] of a texture.
   static bool slotInUse(int textureId, int slot) =>
       _bindings.maplibre_native_gpu_texture_slot_in_use(textureId, slot);
 
-  /// Unregisters a texture.
+  /// Unregisters a texture. Its callback is not called anymore once this
+  /// returns.
   static void disposeTexture(int textureId) =>
       _bindings.maplibre_native_dispose_texture(textureId);
 

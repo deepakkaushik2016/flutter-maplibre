@@ -152,9 +152,11 @@ final class MapRenderer implements FrameTargetHost {
   /// which the map image reaches a frame or two later. A projection of its
   /// view converts for what the frame drew.
   ///
-  /// On Windows, Linux, iOS, and macOS Flutter shows the frame in its next
-  /// frame. On Android the frame went to the Surface, and Flutter takes the
-  /// newest image there, which is nearly always the same one.
+  /// On Windows and Linux Flutter shows the frame in its next frame, and on
+  /// iOS and macOS in the first one after the frame's GPU work ended; a frame
+  /// whose work ends after a newer one's is neither shown nor reported. On
+  /// Android the frame went to the Surface, and Flutter takes the newest
+  /// image there, which is nearly always the same one.
   void Function(RenderFrameResult frame)? onFrameShown;
 
   /// Creates a renderer of [extent] whose map queues the events of
@@ -328,7 +330,7 @@ final class MapRenderer implements FrameTargetHost {
   Future<void> _present(RenderFrameResult result) async {
     try {
       if (_disposed) return;
-      if (await _target.present(_session) && !_disposed) _showFrame(result);
+      if (await _target.present(_session, result)) showFrame(result);
     } on Object catch (error) {
       debugPrint('maplibre_native: present failed: $error');
     } finally {
@@ -337,7 +339,8 @@ final class MapRenderer implements FrameTargetHost {
   }
 
   /// Hands [frame] to [onFrameShown] once the frame reached Flutter.
-  void _showFrame(RenderFrameResult frame) {
+  @override
+  void showFrame(RenderFrameResult frame) {
     if (!_disposed) onFrameShown?.call(frame);
   }
 

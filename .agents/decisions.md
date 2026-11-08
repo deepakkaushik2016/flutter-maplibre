@@ -171,8 +171,37 @@ Each entry: the decision, then why.
   (`CVPixelBufferCreateWithIOSurface`, once per ring), and the
   `FlutterTexture` returns the presented slot's buffer from
   `copyPixelBuffer`, without a copy or a wait.** BGRA8 is what Flutter's
-  pixel buffer textures read. The frame's GPU writes completed before it
-  became acquirable, so Flutter can sample it at once. Dart keeps the frame on
+  pixel buffer textures read. The session attaches with the `MTLSharedEvent`
+  producer sync (and accepts CPU-complete frames, which show at once), so
+  its core worker commits each frame without waiting for the GPU: with the
+  CPU-complete sync the C library called `waitUntilCompleted` on every
+  frame before it could be acquired, and the GPU and CPU work of consecutive
+  frames never overlapped. `present` hands the frame's surface, event and
+  value to the plugin inside the `withIoSurface` and `withProducerSync`
+  views; the plugin retains the event and the slot's buffer until the
+  present settles, and shows the slot from an `MTLSharedEventListener` once
+  the event reaches the value, so Flutter never samples a surface still
+  being drawn. Each present gets a number, and the plugin settles it exactly
+  once through the frame-shown callback, with its slot and number: shown, or
+  not shown when a newer frame was shown first. Showing a frame settles every
+  older present at once, even one whose GPU work never ends, so such a frame
+  doesn't hold its slot: the session's later work on that slot runs after it
+  on the session's own queue, and Flutter never sampled it. A present waiting
+  for its GPU work counts as in use. Before the session resizes, and when it
+  ends, Dart ends the plugin's ring
+  (`maplibre_native_end_gpu_texture_ring`): its waiting presents never
+  settle and are never shown, and Dart forgets them only after the resize's
+  reply, which arrives after any settle posted before the ring ended.
+  `present` doesn't wait for the GPU: the renderer demands the next frame at
+  once, and Dart calls `onFrameShown` (`FrameTargetHost.showFrame`) when the
+  frame settles shown, matched by slot and number in `PendingPresents`, so a
+  late settle never reports another frame. Each settle also queues one
+  release of the frames whose slots are free. Nothing waits on the GPU on
+  the UI isolate or the GPU queue. The consumer half lives in the plugin, not
+  in the C library: only the host knows when Flutter samples a slot, and the
+  library already hands out the event, so no binding needs more from it.
+  `darwin_texture_test.dart` checks these orders with IOSurfaces and Metal
+  shared events the test makes itself. Dart keeps the frame on
   screen acquired, so MapLibre renders into the other slots, and releases a
   frame it replaced once `maplibre_native_gpu_texture_slot_in_use` reports
   its slot free: not the presented slot, and neither of the last two slots
@@ -187,7 +216,7 @@ Each entry: the decision, then why.
   ring. `IOSurfaceIsInUse` can't tell: the ring's
   own buffer and texture keep every surface in use (use count 2), Flutter's
   texture raises nothing, and Flutter has dropped the buffer by the time it
-  takes the next. It checks on each present and every
+  takes the next. It checks on each present, on each settle, and every
   4 ms while a replaced frame is held. A resize releases every held frame
   before the session resizes; Flutter keeps the old buffer it shows, which
   retains its surface.

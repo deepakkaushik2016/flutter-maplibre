@@ -20,19 +20,60 @@ class MaplibreNativeDarwinBindings {
   ) : _lookup = lookup;
 
   int maplibre_native_create_gpu_texture(
+    ffi.Pointer<
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Int64 texture_id,
+          ffi.Uint32 slot,
+          ffi.Uint64 present,
+          ffi.Bool shown,
+        )
+      >
+    >
+    frame_shown,
     ffi.Pointer<ffi.Char> error,
     int error_size,
   ) {
-    return _maplibre_native_create_gpu_texture(error, error_size);
+    return _maplibre_native_create_gpu_texture(frame_shown, error, error_size);
   }
 
   late final _maplibre_native_create_gpu_texturePtr =
       _lookup<
-        ffi.NativeFunction<ffi.Int64 Function(ffi.Pointer<ffi.Char>, ffi.Size)>
+        ffi.NativeFunction<
+          ffi.Int64 Function(
+            ffi.Pointer<
+              ffi.NativeFunction<
+                ffi.Void Function(
+                  ffi.Int64 texture_id,
+                  ffi.Uint32 slot,
+                  ffi.Uint64 present,
+                  ffi.Bool shown,
+                )
+              >
+            >,
+            ffi.Pointer<ffi.Char>,
+            ffi.Size,
+          )
+        >
       >('maplibre_native_create_gpu_texture');
   late final _maplibre_native_create_gpu_texture =
       _maplibre_native_create_gpu_texturePtr
-          .asFunction<int Function(ffi.Pointer<ffi.Char>, int)>();
+          .asFunction<
+            int Function(
+              ffi.Pointer<
+                ffi.NativeFunction<
+                  ffi.Void Function(
+                    ffi.Int64 texture_id,
+                    ffi.Uint32 slot,
+                    ffi.Uint64 present,
+                    ffi.Bool shown,
+                  )
+                >
+              >,
+              ffi.Pointer<ffi.Char>,
+              int,
+            )
+          >();
 
   void maplibre_native_dispose_texture(int texture_id) {
     return _maplibre_native_dispose_texture(texture_id);
@@ -44,6 +85,17 @@ class MaplibreNativeDarwinBindings {
       );
   late final _maplibre_native_dispose_texture =
       _maplibre_native_dispose_texturePtr.asFunction<void Function(int)>();
+
+  void maplibre_native_end_gpu_texture_ring(int texture_id) {
+    return _maplibre_native_end_gpu_texture_ring(texture_id);
+  }
+
+  late final _maplibre_native_end_gpu_texture_ringPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+        'maplibre_native_end_gpu_texture_ring',
+      );
+  late final _maplibre_native_end_gpu_texture_ring =
+      _maplibre_native_end_gpu_texture_ringPtr.asFunction<void Function(int)>();
 
   bool maplibre_native_gpu_texture_slot_in_use(int texture_id, int slot) {
     return _maplibre_native_gpu_texture_slot_in_use(texture_id, slot);
@@ -59,17 +111,21 @@ class MaplibreNativeDarwinBindings {
 
   bool maplibre_native_present_gpu_texture(
     int texture_id,
-    int ring,
     int slot,
     ffi.Pointer<ffi.Void> surface,
+    int shared_event,
+    int value,
+    ffi.Pointer<ffi.Uint64> out_present,
     ffi.Pointer<ffi.Char> error,
     int error_size,
   ) {
     return _maplibre_native_present_gpu_texture(
       texture_id,
-      ring,
       slot,
       surface,
+      shared_event,
+      value,
+      out_present,
       error,
       error_size,
     );
@@ -81,8 +137,10 @@ class MaplibreNativeDarwinBindings {
           ffi.Bool Function(
             ffi.Int64,
             ffi.Uint32,
-            ffi.Uint32,
             ffi.Pointer<ffi.Void>,
+            ffi.Uint64,
+            ffi.Uint64,
+            ffi.Pointer<ffi.Uint64>,
             ffi.Pointer<ffi.Char>,
             ffi.Size,
           )
@@ -94,8 +152,10 @@ class MaplibreNativeDarwinBindings {
             bool Function(
               int,
               int,
-              int,
               ffi.Pointer<ffi.Void>,
+              int,
+              int,
+              ffi.Pointer<ffi.Uint64>,
               ffi.Pointer<ffi.Char>,
               int,
             )

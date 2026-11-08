@@ -100,7 +100,7 @@ final class _DxgiRingTarget extends LibraryRingTarget {
   );
 
   @override
-  int presentFrame(AcquiredFrameHandle frame) =>
+  int presentFrame(AcquiredFrameHandle frame, RenderFrameResult result) =>
       frame.withDxgiSharedTexture((view) {
         DesktopPlugin.presentSharedTexture(
           textureId,
@@ -171,7 +171,7 @@ final class _GlRingTarget extends BorrowedRingTarget<VulkanBorrowedTexture> {
   void releaseRetiredRings() => DesktopPlugin.releaseRetiredSlots(textureId);
 
   @override
-  int presentFrame(AcquiredFrameHandle frame) {
+  int presentFrame(AcquiredFrameHandle frame, RenderFrameResult result) {
     final slot = frame.withVulkanTexture((view) => view.slot);
     DesktopPlugin.presentGpuTexture(textureId, slot);
     return slot;
@@ -214,7 +214,10 @@ final class _PixelBufferTarget extends FrameTarget {
       session.resize(logicalSize(extent));
 
   @override
-  Future<bool> present(RenderSessionHandle session) async {
+  Future<bool> present(
+    RenderSessionHandle session,
+    RenderFrameResult frame,
+  ) async {
     final image = await session.readTexture();
     DesktopPlugin.updatePixelTexture(
       textureId,

@@ -71,7 +71,10 @@ final class _SurfaceTarget extends FrameTarget {
   /// The session presented the frame to the Surface, and Flutter takes the
   /// newest image there.
   @override
-  Future<bool> present(RenderSessionHandle session) async => true;
+  Future<bool> present(
+    RenderSessionHandle session,
+    RenderFrameResult frame,
+  ) async => true;
 
   /// Moves [session] to the texture's current Surface.
   Future<void> _setSurface(RenderSessionHandle session, LogicalExtent extent) =>

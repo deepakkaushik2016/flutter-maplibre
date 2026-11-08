@@ -71,6 +71,10 @@
   vsync. Maps whose frames took more than the rest of a vsync ran at half the
   display rate. Each map uses about 14 MB more memory on a 1290 x 2796
   screen.
+- iOS and macOS: a map renders its next frame while the GPU still draws the
+  last one. Each frame used to wait for its GPU work before Flutter got it;
+  it is now shown once that work ends, and a frame that ends after a newer
+  one is skipped.
 
 ## 0.4.0-pre.2
 

@@ -19,6 +19,8 @@ dependencies:
   maplibre_geolocator: ^0.1.0-pre.1
 
 dev_dependencies:
+  # darwin_texture_test.dart drives the iOS and macOS plugin's C API.
+  ffi: ^2.1.4
   flutter_launcher_icons: ^0.14.3
   flutter_test: { sdk: flutter }
   integration_test: { sdk: flutter }
