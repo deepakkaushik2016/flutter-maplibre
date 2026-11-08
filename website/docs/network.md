@@ -62,4 +62,11 @@ Return the URL unchanged to keep it. The transform runs for every request, so
 keep it fast. If it throws, the error goes to `FlutterError.onError` and the
 request keeps its URL. Request headers match the transformed URL.
 
-`MapLibreNetwork.reset()` removes the headers and the transform.
+## Network status
+
+`status` says whether maps may use the network at all. Set it to
+`NetworkStatus.offline` while the device has no connection; see
+[Without a Network](offline.md#without-a-network).
+
+`MapLibreNetwork.reset()` removes the headers and the transform, and sets the
+status back to online.

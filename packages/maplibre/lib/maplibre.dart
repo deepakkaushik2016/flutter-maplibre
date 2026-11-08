@@ -141,6 +141,7 @@ export 'package:maplibre_platform_interface/maplibre_platform_interface.dart'
         MapStyleJson,
         MapStyleUrl,
         MapTileOperation,
+        NetworkStatus,
         NumExpression,
         OfflineDownloadException,
         OfflineGeometryRegionDefinition,

@@ -4,9 +4,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_native/src/android/android_plugin.dart';
 import 'package:maplibre_native/src/extensions.dart';
-import 'package:maplibre_native_ffi/maplibre_native_ffi.dart';
+import 'package:maplibre_native_ffi/maplibre_native_ffi.dart'
+    hide NetworkStatus;
 import 'package:maplibre_platform_interface/maplibre_platform_interface.dart'
-    show MapLibreNetwork;
+    show MapLibreNetwork, NetworkStatus;
 import 'package:path_provider/path_provider.dart';
 
 Future<String>? _databasePath;
@@ -39,6 +40,7 @@ Future<RuntimeHandle> createRuntime() async {
   final path = await databasePath();
   // Android needs the C library initialized before its first use.
   if (Platform.isAndroid) AndroidPlugin.initialize();
+  watchNetworkStatus();
   final runtime = RuntimeHandle.create(
     options: RuntimeOptions(cachePath: path),
   );
@@ -59,6 +61,45 @@ Future<RuntimeHandle> createRuntime() async {
     rethrow;
   }
   return runtime;
+}
+
+/// Keeps the network status of the C library at [MapLibreNetwork.status],
+/// from now on. The library keeps one status for the whole process, so this
+/// runs once, before the first runtime starts, and then sets each change of
+/// the status at once.
+///
+/// The library starts online, so a status that is still online is not set:
+/// that keeps one an app set through the C API itself before its first map.
+void watchNetworkStatus() {
+  if (_watchesStatus) return;
+  _watchesStatus = true;
+  _appliedStatus = NetworkStatus.online;
+  MapLibreNetwork.changes.addListener(_applyStatus);
+  _applyStatus();
+}
+
+var _watchesStatus = false;
+
+/// The [MapLibreNetwork.status] last set in the library. The other settings
+/// of [MapLibreNetwork] notify too, and they must not set the status again.
+NetworkStatus? _appliedStatus;
+
+void _applyStatus() {
+  final status = MapLibreNetwork.status;
+  if (status == _appliedStatus) return;
+  try {
+    setNetworkStatus(status.toMln());
+    _appliedStatus = status;
+  } on Object catch (error, stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'maplibre',
+        context: ErrorDescription('while setting the network status'),
+      ),
+    );
+  }
 }
 
 /// The runtimes that [createRuntime] created, to apply [MapLibreNetwork]

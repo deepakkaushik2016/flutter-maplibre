@@ -25,6 +25,8 @@ dev_dependencies:
   flutter_test: { sdk: flutter }
   integration_test: { sdk: flutter }
   maplibre_native: ^0.4.0-pre.2
+  # still_image_native.dart renders still images below the public API.
+  maplibre_native_ffi: ^0.202611.0
   very_good_analysis: ^10.0.0
 
 flutter:

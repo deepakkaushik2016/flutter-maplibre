@@ -13,8 +13,8 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   - `lib/src/style/sources/`: sources and the `StyleSources` collection.
   - `lib/src/style/style_backend.dart`: what those collections need from a
     platform.
-  - `lib/src/network.dart`: `MapLibreNetwork`, the static request headers
-    and URL transform of every map and the offline manager.
+  - `lib/src/network.dart`: `MapLibreNetwork`, the static request headers,
+    URL transform and network status of every map and the offline manager.
   - `lib/src/style/terrain.dart`: the 3D `Terrain` of a style, the
     `TerrainLoadMode` of a map, and the `TerrainScreenLocation` of a point
     of its ground.
@@ -59,7 +59,9 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   it and measures frame times for `terrain_soak_test.dart` and
   `terrain_perf_test.dart`, which run on their own, not in `all_test.dart`.
   `shared/engine_state.dart` reads back what MapLibre Native applied to a
-  map, below the public API.
+  map, below the public API. `shared/still_image.dart` renders still images
+  of a static map on the shared database, also below the public API, for
+  `offline_test.dart`.
   `user_location_test.dart` reads the frame's pixels back to find what
   the map drew: Flutter's layer on native, the gl-js canvas on web
   (`shared/browser.dart`). `lib/utils/simulated_locations.dart` walks a simulated

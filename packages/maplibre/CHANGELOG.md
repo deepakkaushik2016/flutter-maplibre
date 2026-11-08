@@ -27,6 +27,11 @@
 
 ### Features
 
+- `MapLibreNetwork.status` tells every map and the `OfflineManager`
+  whether they may use the network (`NetworkStatus.online` or `.offline`).
+  Set it from the app's connectivity monitor: while it is offline, nothing
+  is requested from the network, and a still image of a partly downloaded
+  region finishes with the tiles it has. It does nothing on web.
 - `UserLocationLayer` draws the location on the ground of a 3D terrain at
   every pitch: a draped accuracy circle, a heading cone that fades from the
   dot and keeps its length on screen at every zoom, and a dot that faces the

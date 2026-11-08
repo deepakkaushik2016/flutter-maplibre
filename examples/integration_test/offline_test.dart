@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
+import 'shared/still_image.dart';
 import 'shared/test_map.dart';
 
 void main() {
@@ -20,8 +21,20 @@ final Uint8List _tile = base64Decode(
   '60e6kgAAAABJRU5ErkJggg==',
 );
 
-/// Serves a style with raster tiles up to zoom 1 and a glyph URL, on the
-/// loopback interface, and counts the requests by kind.
+/// An opaque red 1x1 PNG.
+final Uint8List _redTile = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/'
+  'iZk9HQAAAABJRU5ErkJggg==',
+);
+
+/// An opaque green 1x1 PNG.
+final Uint8List _greenTile = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/'
+  'cetH5QAAAABJRU5ErkJggg==',
+);
+
+/// Serves a style with raster tiles up to zoom [rasterMaxZoom] and a glyph
+/// URL, on the loopback interface, and counts the requests by kind.
 class _TileServer {
   _TileServer._(this._server) {
     _server.listen(_serve);
@@ -37,6 +50,12 @@ class _TileServer {
   /// that are not found as empty, so a 404 is no error.
   bool failTiles = false;
 
+  /// The highest zoom level of the raster tiles.
+  int rasterMaxZoom = 1;
+
+  /// The PNG of the tiles of a zoom level, transparent by default.
+  Uint8List Function(int zoom) tileAt = (_) => _tile;
+
   String get _origin => 'http://127.0.0.1:${_server.port}';
 
   String get styleUrl => '$_origin/style.json';
@@ -51,7 +70,7 @@ class _TileServer {
         'type': 'raster',
         'tiles': ['$_origin/tiles/{z}/{x}/{y}.png'],
         'tileSize': 256,
-        'maxzoom': 1,
+        'maxzoom': rasterMaxZoom,
       },
       'point': {
         'type': 'geojson',
@@ -91,7 +110,7 @@ class _TileServer {
       response.statusCode = HttpStatus.internalServerError;
     } else if (kind == 'tiles') {
       response.headers.contentType = ContentType('image', 'png');
-      response.add(_tile);
+      response.add(tileAt(int.parse(path.split('/')[2])));
     } else if (kind == 'fonts') {
       // An empty glyph range.
       response.headers.contentType = ContentType('application', 'x-protobuf');
@@ -308,6 +327,55 @@ void runTests() {
       await manager.resetDatabase();
       expect(await manager.listOfflineRegions(), isEmpty);
     });
+
+    test(
+      'a still image of a partly downloaded region finishes offline',
+      () async {
+        // The region holds the tiles of zoom 1, red. The source goes on to
+        // zoom 2, green, which the image needs.
+        server
+          ..rasterMaxZoom = 2
+          ..tileAt = (zoom) => zoom <= 1 ? _redTile : _greenTile;
+        // Region zoom 0 takes the four 256 px tiles of zoom 1 (see above).
+        final updates = await _download(
+          manager,
+          server,
+          definition: OfflineTilePyramidRegionDefinition(
+            styleUrl: server.styleUrl,
+            bounds: _world,
+            minZoom: 0,
+            maxZoom: 0,
+            pixelRatio: 1,
+          ),
+        );
+        expect(updates.last.downloadCompleted, isTrue);
+        expect(updates.last.status.completedTileCount, 4);
+        final downloaded = server.requests['tiles'];
+
+        MapLibreNetwork.status = NetworkStatus.offline;
+        addTearDown(MapLibreNetwork.reset);
+        // Far from the label at 0, 0. At zoom 1.5 the 256 px tiles of zoom 2
+        // show, and none of them was downloaded.
+        final still = await StillImageMap.open(
+          styleUrl: server.styleUrl,
+          center: const Geographic(lon: 40, lat: 40),
+          zoom: 1.5,
+        );
+        addTearDown(still.close);
+
+        // The still finishes without the tile it lacks, and draws its parent
+        // from the region instead. No request reached the network.
+        await still.render().timeout(const Duration(seconds: 20));
+        expect(server.requests['tiles'], downloaded);
+        expect(await still.pixel(32, 32), [255, 0, 0, 255]);
+
+        // Back online, the next still waits for the tile and draws it.
+        MapLibreNetwork.status = NetworkStatus.online;
+        await still.render().timeout(const Duration(seconds: 20));
+        expect(server.requests['tiles'], greaterThan(downloaded!));
+        expect(await still.pixel(32, 32), [0, 255, 0, 255]);
+      },
+    );
 
     testWidgets('a map shows a downloaded region without the network', (
       tester,

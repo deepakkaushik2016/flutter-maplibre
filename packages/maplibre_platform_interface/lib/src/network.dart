@@ -120,6 +120,18 @@ class RequestHeaders {
       'RequestHeaders($headers, url: $url, kinds: ${kinds?.toList()})';
 }
 
+/// Whether maps and the [OfflineManager] may use the network.
+///
+/// {@category Network}
+enum NetworkStatus {
+  /// Requests go to the network. The default.
+  online,
+
+  /// No request goes to the network. Resources come only from the cache and
+  /// the downloaded offline regions.
+  offline,
+}
+
 /// How every map and the [OfflineManager] request their resources.
 ///
 /// The settings apply to every map, the ones that exist and the ones created
@@ -140,6 +152,7 @@ class RequestHeaders {
 abstract final class MapLibreNetwork {
   static List<RequestHeaders> _requestHeaders = const [];
   static UrlTransform? _urlTransform;
+  static NetworkStatus _status = NetworkStatus.online;
   static final _changes = _Changes();
 
   /// The headers to send with requests. The first entry whose
@@ -165,6 +178,30 @@ abstract final class MapLibreNetwork {
   static set urlTransform(UrlTransform? value) {
     if (value == _urlTransform) return;
     _urlTransform = value;
+    _changes.notify();
+  }
+
+  /// Whether maps and the [OfflineManager] may use the network. Defaults to
+  /// [NetworkStatus.online].
+  ///
+  /// Set it from your app's connectivity monitor. While it is
+  /// [NetworkStatus.offline], no request goes to the network: maps show what
+  /// the cache and the downloaded offline regions hold, and the requests
+  /// that wait for the network are made once it is [NetworkStatus.online]
+  /// again. A still image of a map, such as an image to share, then finishes
+  /// with the tiles it has, drawing a missing tile from a lower zoom level of
+  /// the region, or without it. While the status stays online without a
+  /// network, that image fails instead, because its tiles fail to load.
+  ///
+  /// The status applies to the whole app, also to maps and downloads that
+  /// the app creates through `maplibre_native_ffi` itself. On web, it does
+  /// nothing, because the browser decides when a request can reach the
+  /// network.
+  static NetworkStatus get status => _status;
+
+  static set status(NetworkStatus value) {
+    if (value == _status) return;
+    _status = value;
     _changes.notify();
   }
 
@@ -200,10 +237,12 @@ abstract final class MapLibreNetwork {
     }
   }
 
-  /// Restores the defaults: no headers and no URL transform.
+  /// Restores the defaults: no headers, no URL transform, and
+  /// [NetworkStatus.online].
   static void reset() {
     requestHeaders = const [];
     urlTransform = null;
+    status = NetworkStatus.online;
   }
 }
 

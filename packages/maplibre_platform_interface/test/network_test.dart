@@ -72,6 +72,7 @@ void main() {
     test('has no headers and no transform by default', () {
       expect(MapLibreNetwork.requestHeaders, isEmpty);
       expect(MapLibreNetwork.urlTransform, isNull);
+      expect(MapLibreNetwork.status, NetworkStatus.online);
       expect(MapLibreNetwork.headersFor('https://a.org', .style), isNull);
       expect(
         MapLibreNetwork.transformUrl('https://a.org', .style),
@@ -131,8 +132,12 @@ void main() {
       MapLibreNetwork.urlTransform = transform;
       MapLibreNetwork.urlTransform = transform;
       expect(changes, 2);
+      MapLibreNetwork.status = .offline;
+      MapLibreNetwork.status = .offline;
+      expect(changes, 3);
       MapLibreNetwork.reset();
-      expect(changes, 4);
+      expect(changes, 6);
+      expect(MapLibreNetwork.status, NetworkStatus.online);
       expect(
         () => MapLibreNetwork.requestHeaders.add(const RequestHeaders({})),
         throwsUnsupportedError,

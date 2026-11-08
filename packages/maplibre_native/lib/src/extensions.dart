@@ -336,6 +336,15 @@ extension MapResourceKindExt on MapResourceKind {
   };
 }
 
+/// Converts a network status to the C API.
+extension NetworkStatusExt on NetworkStatus {
+  /// The C API's status.
+  mln.NetworkStatus toMln() => switch (this) {
+    NetworkStatus.online => mln.NetworkStatus.online,
+    NetworkStatus.offline => mln.NetworkStatus.offline,
+  };
+}
+
 /// Converts request headers to the C API.
 extension RequestHeadersExt on RequestHeaders {
   /// The header rule of these headers. Leave out ones with no [kinds],

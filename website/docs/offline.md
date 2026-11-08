@@ -107,6 +107,33 @@ download; `manager.resumeDownload(regionId: id)` continues it.
 region got, also while no download runs: the downloaded and required resources
 and tiles, their size, and whether it is complete.
 
+## Without a Network
+
+Tell the maps when the device has no network, from your app's connectivity
+monitor:
+
+```dart
+MapLibreNetwork.status = NetworkStatus.offline;
+// ... and once the connection is back:
+MapLibreNetwork.status = NetworkStatus.online;
+```
+
+While the status is offline, no request goes to the network. Maps show what
+the cache and the downloaded regions hold, and draw a tile that a region
+lacks from a lower zoom level of the region, or leave it out. The requests
+that wait for the network are made once the status is online again.
+
+This matters most for still images of a map, such as one to share. Offline,
+a still image of a region that lacks some tiles finishes with the tiles it
+has. A still image needs every resource it shows, though: without the style,
+a sprite or a glyph range, it fails. If the status stays online while the
+device has no network, the image fails too, because its tiles fail to load.
+
+The status applies to the whole app, also to maps and downloads that the app
+creates through `maplibre_native_ffi` itself. `MapLibreNetwork.reset()` sets
+it back to online. On web, it does nothing: the browser decides when a
+request can reach the network.
+
 ## Managing Offline Regions
 
 After regions are downloaded, they can be managed using methods to list, merge,
