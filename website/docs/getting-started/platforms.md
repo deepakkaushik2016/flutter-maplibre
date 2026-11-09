@@ -81,7 +81,8 @@ first, optional steps are collapsed below them. See [Installation](setup.md) for
 ??? note "Optional: build for simulators on Apple Silicon only"
 
     The C library is published for devices and arm64 simulators. If a
-    simulator build fails to link the x86_64 slice, exclude it in
+    simulator build fails on the x86_64 slice, for example with `publishes
+    no archives for ios-simulator-x64` from the build hook, exclude it in
     `ios/Flutter/Debug.xcconfig` and `ios/Flutter/Release.xcconfig`:
 
     ```text title="ios/Flutter/Debug.xcconfig"

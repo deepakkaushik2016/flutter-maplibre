@@ -141,3 +141,6 @@ hooks:
 - The app needs no dependency on `maplibre_native_ffi`, unless it imports the
   binding itself. Then it has to name the same Git `url`, `ref` and `path`.
 - The first build for each target needs network access.
+- The release has no x86_64 iOS simulator build, so an iOS app has to exclude
+  that slice, as [Platform setup](platforms.md) shows. Otherwise a simulator
+  build stops at the hook with `publishes no archives for ios-simulator-x64`.
