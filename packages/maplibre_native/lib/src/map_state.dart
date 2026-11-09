@@ -1005,7 +1005,6 @@ class _NativeGestureCamera implements GestureCameraSink {
 
   @override
   void gestureUpdate(GestureCameraUpdate update) {
-    _state._renderer?.expediteFrame();
     final scales = update.zoomBy != 0;
     final rotates = update.rotateBy != 0;
     final tilts = update.pitchBy != 0;
@@ -1029,6 +1028,7 @@ class _NativeGestureCamera implements GestureCameraSink {
         gesturePhase: mln.GesturePhase.update,
       ),
     );
+    _state._renderer?.expediteFrame();
   }
 
   /// Continues a flick as the map's own gesture momentum, which slows each
@@ -1083,7 +1083,6 @@ class _NativeGestureCamera implements GestureCameraSink {
     Offset around, {
     Duration duration = Duration.zero,
   }) {
-    _state._renderer?.expediteFrame();
     _state
       .._cancelAnimation()
       .._nextChangeReason = CameraChangeReason.gesture
@@ -1098,6 +1097,7 @@ class _NativeGestureCamera implements GestureCameraSink {
                 ),
         ),
       );
+    _state._renderer?.expediteFrame();
   }
 }
 
