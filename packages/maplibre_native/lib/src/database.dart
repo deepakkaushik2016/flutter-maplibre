@@ -40,7 +40,7 @@ Future<RuntimeHandle> createRuntime() async {
   final path = await databasePath();
   // Android needs the C library initialized before its first use.
   if (Platform.isAndroid) AndroidPlugin.initialize();
-  watchNetworkStatus();
+  _watchNetworkStatus();
   final runtime = RuntimeHandle.create(
     options: RuntimeOptions(cachePath: path),
   );
@@ -63,6 +63,11 @@ Future<RuntimeHandle> createRuntime() async {
   return runtime;
 }
 
+/// Starts what [createRuntime] starts for [MapLibreNetwork.status], for tests
+/// that create no runtime.
+@visibleForTesting
+void watchNetworkStatusForTesting() => _watchNetworkStatus();
+
 /// Keeps the network status of the C library at [MapLibreNetwork.status],
 /// from now on. The library keeps one status for the whole process, so this
 /// runs once, before the first runtime starts, and then sets each change of
@@ -70,7 +75,7 @@ Future<RuntimeHandle> createRuntime() async {
 ///
 /// The library starts online, so a status that is still online is not set:
 /// that keeps one an app set through the C API itself before its first map.
-void watchNetworkStatus() {
+void _watchNetworkStatus() {
   if (_watchesStatus) return;
   _watchesStatus = true;
   _appliedStatus = NetworkStatus.online;

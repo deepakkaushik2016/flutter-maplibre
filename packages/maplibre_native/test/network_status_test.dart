@@ -19,19 +19,19 @@ void main() {
     expect(mln.getNetworkStatus(), mln.NetworkStatus.online);
 
     // As creating the first runtime does.
-    watchNetworkStatus();
+    watchNetworkStatusForTesting();
     expect(mln.getNetworkStatus(), mln.NetworkStatus.offline);
   });
 
   test('applies each change at once', () {
-    watchNetworkStatus();
+    watchNetworkStatusForTesting();
     MapLibreNetwork.status = .offline;
     expect(mln.getNetworkStatus(), mln.NetworkStatus.offline);
     MapLibreNetwork.status = .online;
     expect(mln.getNetworkStatus(), mln.NetworkStatus.online);
 
     // A second watch adds no second listener and keeps the status.
-    watchNetworkStatus();
+    watchNetworkStatusForTesting();
     MapLibreNetwork.status = .offline;
     expect(mln.getNetworkStatus(), mln.NetworkStatus.offline);
     MapLibreNetwork.reset();
@@ -39,7 +39,7 @@ void main() {
   });
 
   test('sets the status again after the app set it in the library', () {
-    watchNetworkStatus();
+    watchNetworkStatusForTesting();
     MapLibreNetwork.status = .offline;
     // An app that also calls the C API directly.
     mln.setNetworkStatus(mln.NetworkStatus.online);
