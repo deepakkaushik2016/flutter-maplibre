@@ -88,30 +88,42 @@ setup steps, see [Platform setup](platforms.md).
     The development version is not considered stable and shouldn't be
     used in production systems.
 
-Depend on the packages from the Git repository. `maplibre` depends on
-the other packages by version, so override them, too:
+Depend on the packages from the terrain fork. `maplibre` depends on the
+other packages by version, so override them, too. All four use the same
+repository and `ref`:
 
 ```yaml title="pubspec.yaml"
 dependencies:
   maplibre:
     git:
-      url: https://github.com/josxha/flutter-maplibre
+      url: https://github.com/deepakkaushik2016/flutter-maplibre
+      ref: terrain-3d-202611.5
       path: packages/maplibre
 
 dependency_overrides:
   maplibre_native:
     git:
-      url: https://github.com/josxha/flutter-maplibre
+      url: https://github.com/deepakkaushik2016/flutter-maplibre
+      ref: terrain-3d-202611.5
       path: packages/maplibre_native
   maplibre_platform_interface:
     git:
-      url: https://github.com/josxha/flutter-maplibre
+      url: https://github.com/deepakkaushik2016/flutter-maplibre
+      ref: terrain-3d-202611.5
       path: packages/maplibre_platform_interface
   maplibre_web:
     git:
-      url: https://github.com/josxha/flutter-maplibre
+      url: https://github.com/deepakkaushik2016/flutter-maplibre
+      ref: terrain-3d-202611.5
       path: packages/maplibre_web
+
+hooks:
+  user_defines:
+    maplibre_native_ffi:
+      release_url: https://github.com/deepakkaushik2016/maplibre-native-ffi/releases/download
 ```
+
+The `hooks` block is explained in the next section.
 
 ### The terrain build of the C library
 
@@ -140,6 +152,8 @@ hooks:
 - Without the setting, the build stops with `HTTP 404` on the download.
 - The app needs no dependency on `maplibre_native_ffi`, unless it imports the
   binding itself. Then it has to name the same Git `url`, `ref` and `path`.
+- The release has no Linux, Windows or Intel-Mac (x86_64 macOS) archives, so
+  those platforms need a local build of the C library.
 - The first build for each target needs network access.
 - The release has no x86_64 iOS simulator build, so an iOS app has to exclude
   that slice, as [Platform setup](platforms.md) shows. Otherwise a simulator
