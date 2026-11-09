@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -72,13 +73,18 @@ class _Server {
   /// The requests for sprites and glyphs that reached the server.
   int styleAssetRequests = 0;
 
+  /// A style path no other server shares, so that no cached style of a
+  /// server with the same recycled loopback port can answer for this one.
+  final _stylePath = '/style-${_nextId++}-${Random().nextInt(1 << 32)}.json';
+  static int _nextId = 0;
+
   String get _url => 'http://127.0.0.1:${_http.port}';
-  String get styleUrl => '$_url/style.json';
+  String get styleUrl => '$_url$_stylePath';
 
   Future<void> _serve(HttpRequest request) async {
     final response = request.response;
     final path = request.uri.path;
-    if (path == '/style.json') {
+    if (path == _stylePath) {
       styleRequests++;
       response.write(style);
     } else if (path.startsWith('/sprites/') || path.startsWith('/glyphs/')) {

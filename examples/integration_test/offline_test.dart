@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -59,7 +60,12 @@ class _TileServer {
 
   String get _origin => 'http://127.0.0.1:${_server.port}';
 
-  String get styleUrl => '$_origin/style.json';
+  /// A style path no other server shares, so that no cached style of a
+  /// server with the same recycled loopback port can answer for this one.
+  final _stylePath = '/style-${_nextId++}-${Random().nextInt(1 << 32)}.json';
+  static int _nextId = 0;
+
+  String get styleUrl => '$_origin$_stylePath';
 
   String get _style => jsonEncode({
     'version': 8,
@@ -104,7 +110,7 @@ class _TileServer {
     final kind = path.split('/')[1];
     requests[kind] = (requests[kind] ?? 0) + 1;
     final response = request.response;
-    if (path == '/style.json') {
+    if (path == _stylePath) {
       response.headers.contentType = ContentType.json;
       response.write(_style);
     } else if (kind == 'tiles' && failTiles) {
