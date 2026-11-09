@@ -53,7 +53,10 @@ class _Server {
   _Server._(this._http, this._dem, this._raster) {
     _http.listen((request) async {
       final path = request.uri.path;
-      if (path.startsWith('/hang')) return;
+      if (path.startsWith('/hang')) {
+        if (!_stillPending.isCompleted) _stillPending.complete();
+        return;
+      }
       if (path.startsWith('/missing')) {
         request.response.statusCode = HttpStatus.notFound;
         await request.response.close();
@@ -80,6 +83,11 @@ class _Server {
   final HttpServer _http;
   final Uint8List _dem;
   final Uint8List _raster;
+  final _stillPending = Completer<void>();
+
+  /// Completes once a style that [hangingTileStyle] gives has loaded and its
+  /// still waits for a tile that the server never answers.
+  Future<void> get stillPending => _stillPending.future;
 
   String get _url => 'http://127.0.0.1:${_http.port}';
 
@@ -113,6 +121,24 @@ class _Server {
 
   /// A style whose document the server doesn't have.
   MapStyle missingStyle() => MapStyle.url('$_url/missing/style.json');
+
+  /// A style that loads, and whose only tile source never answers, so its
+  /// still stays pending inside `requestStillImage`.
+  MapStyle hangingTileStyle() => MapStyle.json(
+    jsonEncode({
+      'version': 8,
+      'sources': {
+        'ground': {
+          'type': 'raster',
+          'tiles': ['$_url/hang-tile/{z}/{x}/{y}.png'],
+          'tileSize': 256,
+        },
+      },
+      'layers': [
+        {'id': 'ground', 'type': 'raster', 'source': 'ground'},
+      ],
+    }),
+  );
 
   /// A style whose document never answers.
   MapStyle hangingStyle() => MapStyle.url('$_url/hang/style.json');
@@ -274,6 +300,28 @@ void main() {
     for (final png in pngs) {
       expect(await _center_(png), _background);
     }
+  });
+
+  test('dispose fails a still that waits for its tiles', () async {
+    final running = renderer.render(
+      style: server.hangingTileStyle(),
+      size: _size,
+      camera: _camera,
+    );
+    await server.stillPending;
+    renderer.dispose();
+    await expectLater(running, throwsA(isA<StillImageException>()));
+  });
+
+  test('a given center height without a terrain draws normally', () async {
+    final png = await renderer.render(
+      style: _flat,
+      size: _size,
+      camera: _camera,
+      centerAltitude: 100,
+    );
+    expect(await _center_(png), _background);
+    expect(renderer.debugLastFrameCount, 1);
   });
 
   test('dispose fails a running request and later ones', () async {
