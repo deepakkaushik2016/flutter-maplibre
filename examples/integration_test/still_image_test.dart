@@ -69,6 +69,9 @@ class _Server {
   bool sparse = false;
   int styleRequests = 0;
 
+  /// The requests for sprites and glyphs that reached the server.
+  int styleAssetRequests = 0;
+
   String get _url => 'http://127.0.0.1:${_http.port}';
   String get styleUrl => '$_url/style.json';
 
@@ -78,6 +81,9 @@ class _Server {
     if (path == '/style.json') {
       styleRequests++;
       response.write(style);
+    } else if (path.startsWith('/sprites/') || path.startsWith('/glyphs/')) {
+      styleAssetRequests++;
+      response.statusCode = HttpStatus.notFound;
     } else if (path.startsWith('/dem/13/') && sparse) {
       response.statusCode = HttpStatus.notFound;
     } else {
@@ -113,6 +119,59 @@ class _Server {
       {'id': 'ground', 'type': 'raster', 'source': 'ground'},
     ],
   });
+
+  /// A style with a sprite that nothing has cached.
+  MapStyle spriteStyle() => MapStyle.json(
+    jsonEncode({
+      'version': 8,
+      'sprite': '$_url/sprites/missing',
+      'sources': <String, Object>{},
+      'layers': [
+        {
+          'id': 'background',
+          'type': 'background',
+          'paint': {'background-color': '#0000ff'},
+        },
+      ],
+    }),
+  );
+
+  /// A style with a label whose glyph range nothing has cached.
+  MapStyle glyphStyle() => MapStyle.json(
+    jsonEncode({
+      'version': 8,
+      'glyphs': '$_url/glyphs/{fontstack}/{range}.pbf',
+      'sources': {
+        'label': {
+          'type': 'geojson',
+          'data': {
+            'type': 'Feature',
+            'properties': <String, Object>{},
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [86.925, 27.988],
+            },
+          },
+        },
+      },
+      'layers': [
+        {
+          'id': 'background',
+          'type': 'background',
+          'paint': {'background-color': '#0000ff'},
+        },
+        {
+          'id': 'label',
+          'type': 'symbol',
+          'source': 'label',
+          'layout': {
+            'text-field': 'A',
+            'text-font': ['Noto Sans Regular'],
+          },
+        },
+      ],
+    }),
+  );
 
   Future<void> close() => _http.close(force: true);
 }
@@ -188,6 +247,34 @@ void runTests() {
         throwsA(isA<StillImageException>()),
       );
       expect(server.styleRequests, 0);
+    });
+
+    test('a sprite missing offline fails instead of hanging', () async {
+      MapLibreNetwork.status = NetworkStatus.offline;
+      await expectLater(
+        renderer.render(
+          style: server.spriteStyle(),
+          size: _size,
+          camera: _everest,
+          timeout: const Duration(seconds: 20),
+        ),
+        throwsA(isA<StillImageException>()),
+      );
+      expect(server.styleAssetRequests, 0);
+    });
+
+    test('a glyph range missing offline fails instead of hanging', () async {
+      MapLibreNetwork.status = NetworkStatus.offline;
+      await expectLater(
+        renderer.render(
+          style: server.glyphStyle(),
+          size: _size,
+          camera: _everest,
+          timeout: const Duration(seconds: 20),
+        ),
+        throwsA(isA<StillImageException>()),
+      );
+      expect(server.styleAssetRequests, 0);
     });
 
     test('overlapping requests each finish', () async {
