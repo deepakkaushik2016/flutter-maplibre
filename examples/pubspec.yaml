@@ -26,7 +26,11 @@ dev_dependencies:
   integration_test: { sdk: flutter }
   maplibre_native: ^0.4.0-pre.2
   # still_image_native.dart renders still images below the public API.
-  maplibre_native_ffi: ^0.202611.0
+  maplibre_native_ffi:
+    git:
+      url: https://github.com/deepakkaushik2016/maplibre-native-ffi
+      ref: terrain-3d-202611.5
+      path: bindings/dart
   very_good_analysis: ^10.0.0
 
 flutter:

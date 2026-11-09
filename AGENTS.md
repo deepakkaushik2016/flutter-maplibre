@@ -24,8 +24,10 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
 - `packages/maplibre_geolocator`: optional adapter from `geolocator` positions
   to the `UserLocationLayer` of `maplibre`.
 - `packages/maplibre_native`: every other platform, on the MapLibre Native C API.
-  - The C API and its Dart binding come from `maplibre_native_ffi` on pub.dev,
-    whose build hook downloads the prebuilt C library of its release.
+  - The C API and its Dart binding come from `maplibre_native_ffi`, by Git
+    from the terrain fork at a tag. Its build hook downloads the prebuilt C
+    library of that release from the URL in `release_url` of the root
+    `pubspec.yaml`.
   - `lib/src/frame_target.dart`: how frames reach Flutter. `MapRenderer`
     drives the session the same way everywhere; each platform's
     `FrameTarget` (`lib/src/<platform>/*_target.dart`) owns its texture and

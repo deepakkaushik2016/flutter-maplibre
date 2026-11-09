@@ -89,8 +89,8 @@ for every change you submit and must understand it. Follow the
 build hook downloads a prebuilt library for each target. You only need a local
 build to work on the C library itself.
 
-Clone [maplibre-native-ffi](https://github.com/maplibre/maplibre-native-ffi)
-at the release tag the pubspec resolves to, build the presets you need as its
+Clone [the terrain fork of maplibre-native-ffi](https://github.com/deepakkaushik2016/maplibre-native-ffi)
+at the tag that `packages/maplibre_native/pubspec.yaml` names, build the presets you need as its
 development docs describe, and name the build root in the root
 `pubspec.yaml`. The hook then takes `<preset>/install` under it for each
 target:
@@ -102,7 +102,8 @@ hooks:
       local_build: ../maplibre-native-ffi/build
 ```
 
-Remove the setting to go back to the prebuilt library.
+Remove the setting to go back to the prebuilt library, which the hook downloads
+from the fork's releases, named by `release_url` in the same place.
 
 ## Community
 

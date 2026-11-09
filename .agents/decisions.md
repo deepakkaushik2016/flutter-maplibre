@@ -7,11 +7,14 @@ Each entry: the decision, then why.
 - **Two platform packages: `maplibre_web` for the browser and `maplibre_native`
   for everything else.** One C API serves every native platform, so the
   per-platform packages (android, ios, webview) were removed.
-- **The C API comes from the `maplibre_native_ffi` package on pub.dev
-  (0.202611.0), whose build hook downloads the prebuilt C library of its
-  release, checked against digests pinned in the package.** No submodule and
-  no local C build are needed; `local_build` (see Build and CI) points the
-  hook at one when the C library changes.
+- **The C API comes from the `maplibre_native_ffi` package, by Git from the
+  terrain fork at the tag `terrain-3d-202611.5`, because no release on pub.dev
+  has the terrain API.** The build hook downloads the prebuilt C library of
+  that release, checked against digests pinned at the tag. The tag has the
+  pin committed, which a Git dependency needs. No submodule and no local C
+  build are needed; `local_build` (see Build and CI) points the hook at one
+  when the C library changes. `maplibre_native` and the example both name the
+  Git source, because a workspace can't mix it with a hosted constraint.
 - **Rendering goes only through the texture registry, never platform views.**
   This keeps Flutter composition, transforms, and overlays working.
 - **Windows and Linux render through Vulkan. Android renders through OpenGL
@@ -1013,6 +1016,10 @@ Each entry: the decision, then why.
 
 ## Build and CI
 
+- **`hooks.user_defines.maplibre_native_ffi.release_url` names the fork's
+  releases in the root `pubspec.yaml`.** Hooks read user defines from the root
+  of the workspace only, so `examples/` takes it from there and an app has to
+  set its own. The hook's default host has no terrain release.
 - **A local C build is named in the root `pubspec.yaml` as
   `hooks.user_defines.maplibre_native_ffi.local_build`, a maplibre-native-ffi
   CMake build root.** The hook takes `<preset>/install` under it for each

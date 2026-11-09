@@ -112,3 +112,32 @@ dependency_overrides:
       url: https://github.com/josxha/flutter-maplibre
       path: packages/maplibre_web
 ```
+
+### The terrain build of the C library
+
+The development version needs a build of the MapLibre Native C library with
+the terrain API, which no release of `maplibre_native_ffi` on pub.dev has yet.
+`maplibre_native` therefore depends on the binding by Git, from the
+[terrain fork](https://github.com/deepakkaushik2016/maplibre-native-ffi) at the
+tag `terrain-3d-202611.5`.
+
+The build hook of the binding downloads the C library for each target and
+checks it against digests pinned at that tag. By default it looks on the
+upstream release host, which has no terrain release, so an app has to name the
+fork's releases in its own root `pubspec.yaml`:
+
+```yaml title="pubspec.yaml"
+hooks:
+  user_defines:
+    maplibre_native_ffi:
+      release_url: https://github.com/deepakkaushik2016/maplibre-native-ffi/releases/download
+```
+
+- Hooks read user defines only from the root `pubspec.yaml` of the app or pub
+  workspace, so the setting doesn't reach an app from a dependency.
+- The URL is the base of the downloads; the hook adds the tag and the archive
+  name.
+- Without the setting, the build stops with `HTTP 404` on the download.
+- The app needs no dependency on `maplibre_native_ffi`, unless it imports the
+  binding itself. Then it has to name the same Git `url`, `ref` and `path`.
+- The first build for each target needs network access.

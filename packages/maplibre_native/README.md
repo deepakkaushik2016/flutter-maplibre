@@ -57,10 +57,24 @@ build hook downloads the prebuilt C library, and shows each map as a Flutter
 - `MAPLIBRE_NATIVE_DISABLE_ZERO_COPY=1` forces the CPU readback, on Linux and
   Windows.
 
+## The C library
+
+The binding comes by Git from the
+[terrain fork](https://github.com/deepakkaushik2016/maplibre-native-ffi) of
+maplibre-native-ffi, at a tag. Its build hook downloads the C library of that
+release, and the app has to say where from, in its root `pubspec.yaml`:
+
+```yaml
+hooks:
+  user_defines:
+    maplibre_native_ffi:
+      release_url: https://github.com/deepakkaushik2016/maplibre-native-ffi/releases/download
+```
+
 ## Building the C library locally
 
 By default the build hook of `maplibre_native_ffi` downloads the C library of
-the release it was published with. To use a local build of
+the release it was tagged with. To use a local build of
 [maplibre-native-ffi](https://github.com/maplibre/maplibre-native-ffi)
 instead, name its CMake build root in the root `pubspec.yaml`. The hook takes
 `<preset>/install` under it for each target, so one setting serves every

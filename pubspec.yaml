@@ -26,24 +26,16 @@ dev_dependencies:
 # The build hook of maplibre_native_ffi downloads the C library for each
 # target and picks its render backend: OpenGL ES on Android, Metal on iOS and
 # macOS, Vulkan on Windows and Linux. maplibre_native renders through whichever
-# one it got. To render through Vulkan on Android, select it here. To use a
-# local build of maplibre-native-ffi, name its CMake build root (holding
-# <preset>/install for each target) in local_build; see CONTRIBUTING.md.
+# one it got. To render through Vulkan on Android, select it under backend:
+# android: vulkan. To use a local build of maplibre-native-ffi, name its CMake
+# build root (holding <preset>/install for each target) in local_build; see
+# CONTRIBUTING.md.
 #
-# hooks:
-#   user_defines:
-#     maplibre_native_ffi:
-#       backend:
-#         android: vulkan
-#       local_build: ../maplibre-native-ffi/build
-
-# Local development against the terrain build of maplibre-native-ffi (a
-# sibling clone). Drop this block once a release of the binding carries the
-# terrain API.
-dependency_overrides:
-  maplibre_native_ffi: {path: ../maplibre-native-ffi/bindings/dart}
-
+# The binding comes from the terrain fork of maplibre-native-ffi, by git, so its
+# hook has to fetch the C library from that fork's releases: the default host
+# has no terrain release. Only the root pubspec of the app or workspace is read,
+# so examples/ takes this setting from here.
 hooks:
   user_defines:
     maplibre_native_ffi:
-      local_build: ../maplibre-native-ffi/build
+      release_url: https://github.com/deepakkaushik2016/maplibre-native-ffi/releases/download

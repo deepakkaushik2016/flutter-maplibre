@@ -2,6 +2,11 @@
 
 ### Breaking Changes
 
+- `maplibre_native_ffi` now comes by Git from a terrain fork, and an app has
+  to name that fork's releases as
+  `hooks.user_defines.maplibre_native_ffi.release_url` in its root
+  `pubspec.yaml`. See
+  [Installation](https://josxha.github.io/flutter-maplibre/docs/getting-started/setup/).
 - `MapController` has four new members: `toLngLatOnTerrain`,
   `toScreenLocationOnTerrain`, `setTerrainLoadMode` and
   `queryTerrainElevation`. A class that implements `MapController`, such as
