@@ -7,17 +7,19 @@ final class _Simulation {
   _Simulation(this.refreshMs, this.frameMs) {
     pacer = FramePacer(
       schedule: (tick) {
-        expect(
-          _pendingTick,
-          isNull,
-          reason: 'the pacer asks for one tick at a time',
-        );
-        _pendingTick = tick;
-        ticksRequested++;
+        expect(_tick, isNull, reason: 'the pacer asks for one tick at a time');
+        _tick = tick;
       },
       demand: () {
         demands++;
-        _busyUntil = _now + frameMs;
+        demandTimes.add(_now);
+        _frameEnd = _now + frameMs;
+      },
+      now: () => Duration(microseconds: (_now * 1000).round()),
+      delay: (duration, callback) {
+        expect(_delayed, isNull);
+        _delayEnd = _now + duration.inMicroseconds / 1000;
+        _delayed = callback;
       },
     );
   }
@@ -27,31 +29,38 @@ final class _Simulation {
   late final FramePacer pacer;
   int demands = 0;
   int refreshes = 0;
-  int ticksRequested = 0;
+  final demandTimes = <double>[];
 
   double _now = 0;
-  double? _busyUntil;
-  void Function()? _pendingTick;
+  double? _frameEnd;
+  double? _delayEnd;
+  void Function()? _tick;
+  void Function()? _delayed;
 
-  /// Flies for [durationMs]: the pacer's first demand starts it, and each
-  /// finished frame tells the pacer, until the flight ends.
   void fly(double durationMs) {
     var nextRefresh = refreshMs;
     pacer.frameEnded();
     while (_now < durationMs) {
-      final frameEnd = _busyUntil;
-      if (frameEnd != null && frameEnd <= nextRefresh) {
-        _now = frameEnd;
-        _busyUntil = null;
+      final frame = _frameEnd ?? double.infinity;
+      final delay = _delayEnd ?? double.infinity;
+      if (frame <= nextRefresh && frame <= delay) {
+        _now = frame;
+        _frameEnd = null;
         pacer.frameEnded();
-        continue;
+      } else if (delay <= nextRefresh) {
+        _now = delay;
+        _delayEnd = null;
+        final callback = _delayed!;
+        _delayed = null;
+        callback();
+      } else {
+        _now = nextRefresh;
+        nextRefresh += refreshMs;
+        refreshes++;
+        final tick = _tick;
+        _tick = null;
+        tick?.call();
       }
-      _now = nextRefresh;
-      nextRefresh += refreshMs;
-      refreshes++;
-      final tick = _pendingTick;
-      _pendingTick = null;
-      tick?.call();
     }
   }
 }
@@ -81,40 +90,69 @@ void main() {
 
     test('a frame of 8 ms renders once per 120 Hz refresh', () {
       final sim = _Simulation(1000 / 120, 8)..fly(2000);
+      // The pacer starts from 60 Hz and learns the display's rate over the
+      // first refreshes.
       expect(
         sim.demands,
-        inInclusiveRange(sim.refreshes - 2, sim.refreshes + 1),
+        inInclusiveRange(sim.refreshes - 30, sim.refreshes + 1),
       );
+    });
+
+    test('a short frame starts before the coming refresh, not at it', () {
+      final sim = _Simulation(1000 / 60, 4)..fly(1000);
+      // Past the warm-up, each demand falls about a third of a refresh ahead
+      // of a refresh, so the frame ends well before the refresh after it.
+      for (final time in sim.demandTimes.skip(4)) {
+        final phase = time % (1000 / 60);
+        expect(phase, inInclusiveRange(10.0, 12.0), reason: 'at $time ms');
+      }
     });
 
     test('the first frame after rest is demanded at once', () {
       var demands = 0;
-      final pacer = FramePacer(schedule: (_) {}, demand: () => demands++);
+      final pacer = FramePacer(
+        schedule: (_) {},
+        demand: () => demands++,
+        now: () => Duration.zero,
+        delay: (_, callback) => callback(),
+      );
       pacer.frameEnded();
       expect(demands, 1);
     });
 
-    test('at rest it asks for one tick and then none', () {
+    test('at rest it stops asking for refreshes and renders nothing', () {
       final ticks = <void Function()>[];
       var demands = 0;
-      final pacer = FramePacer(schedule: ticks.add, demand: () => demands++);
-      pacer.frameEnded();
+      var time = Duration.zero;
+      final pacer = FramePacer(
+        schedule: ticks.add,
+        demand: () => demands++,
+        now: () => time,
+        delay: (_, callback) => callback(),
+      )..frameEnded();
       expect(demands, 1);
-      expect(ticks, hasLength(1));
-      // No frame ends: the refresh grants the next demand and asks no more.
-      ticks.removeAt(0)();
+      // No frame ends, as no change comes: a few refreshes, then none.
+      for (var i = 0; i < 6 && ticks.isNotEmpty; i++) {
+        time += const Duration(microseconds: 16667);
+        ticks.removeAt(0)();
+      }
       expect(ticks, isEmpty);
       expect(demands, 1);
-      // The next change renders at once, from the granted demand.
+      // The next change, long after, renders at once.
+      time += const Duration(seconds: 1);
       pacer.frameEnded();
       expect(demands, 2);
     });
 
-    test('a refresh that a frame waited for demands it at once', () {
+    test('a refresh that a frame waited for demands it', () {
       final ticks = <void Function()>[];
       var demands = 0;
-      final pacer = FramePacer(schedule: ticks.add, demand: () => demands++)
-        ..frameEnded(); // Rendered at once; its next demand has no credit.
+      final pacer = FramePacer(
+        schedule: ticks.add,
+        demand: () => demands++,
+        now: () => Duration.zero,
+        delay: (_, callback) => callback(),
+      )..frameEnded(); // Rendered at once; its next demand has no credit.
       pacer.frameEnded();
       expect(demands, 1);
       expect(ticks, hasLength(1));

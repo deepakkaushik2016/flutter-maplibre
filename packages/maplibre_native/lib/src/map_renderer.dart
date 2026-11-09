@@ -58,7 +58,12 @@ final class MapRenderer implements FrameTargetHost {
     this._extent,
   ) {
     _target.host = this;
-    _pacer = FramePacer(schedule: _clock.schedule, demand: demandFrame);
+    _pacer = FramePacer(
+      schedule: _clock.schedule,
+      demand: demandFrame,
+      now: () => _watch.elapsed,
+      delay: _clock.delay,
+    );
   }
 
   final RuntimeHandle _runtime;
@@ -79,6 +84,7 @@ final class MapRenderer implements FrameTargetHost {
   /// Keeps the session from rendering frames that the display can't show.
   late final FramePacer _pacer;
   final _clock = FlutterFrameClock();
+  final _watch = Stopwatch()..start();
   LogicalExtent _extent;
   LogicalExtent? _pendingExtent;
   var _resizing = false;
