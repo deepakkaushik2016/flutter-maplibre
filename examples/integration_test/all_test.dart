@@ -12,6 +12,7 @@ import 'network_test.dart' as network;
 import 'offline_test.dart' as offline;
 import 'paused_test.dart' as paused;
 import 'projection_test.dart' as projection;
+import 'still_image_test.dart' as still_image;
 import 'style_test.dart' as style;
 import 'terrain_gestures_test.dart' as terrain_gestures;
 import 'terrain_test.dart' as terrain;
@@ -38,6 +39,7 @@ void main() {
   ui.runTests();
   user_location.runTests();
   offline.runTests();
+  still_image.runTests();
   paused.runTests();
   unsupported.runTests();
   darwin_texture.runTests();

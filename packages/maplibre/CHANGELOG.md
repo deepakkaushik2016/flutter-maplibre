@@ -27,6 +27,8 @@
 
 ### Features
 
+- `StillImageRenderer` draws a map into a PNG without showing one, for
+  example to share it, with an optional 3D terrain. Not on web.
 - `MapLibreNetwork.status` tells every map and the `OfflineManager`
   whether they may use the network (`NetworkStatus.online` or `.offline`).
   Set it from the app's connectivity monitor: while it is offline, nothing

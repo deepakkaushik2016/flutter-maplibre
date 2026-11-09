@@ -37,6 +37,15 @@ abstract class MapLibrePlatform extends PlatformInterface {
 
   /// Return whether offline manager is supported on the current platform.
   bool get offlineManagerIsSupported => false;
+
+  /// Return a platform specific [StillImageRenderer] object.
+  Future<StillImageRenderer> createStillImageRenderer() =>
+      throw UnsupportedError(
+        'MapLibre StillImageRenderer is not supported on this platform.',
+      );
+
+  /// Return whether still images are supported on the current platform.
+  bool get stillImageRendererIsSupported => false;
 }
 
 /// A stub implementation of the MapLibrePlatform interface.

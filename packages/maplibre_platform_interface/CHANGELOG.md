@@ -21,6 +21,8 @@ below. See also the
 
 ### Features
 
+- `StillImageRenderer` draws a map into a PNG without showing one, for
+  example to share it, with an optional 3D terrain. Not on web.
 - `MapController.maybeOf` and `MapController.of` take `camera: false` to
   look up the controller without rebuilding the widget on every camera
   change, only when the map hands out a new style.

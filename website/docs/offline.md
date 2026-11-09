@@ -134,6 +134,38 @@ creates through `maplibre_native_ffi` itself. `MapLibreNetwork.reset()` sets
 it back to online. On web, it does nothing: the browser decides when a
 request can reach the network.
 
+## Still Images
+
+`StillImageRenderer` draws a map into a PNG without showing one, for example
+to share it. Not on web, where `StillImageRenderer.isSupported` is false.
+
+```dart
+final renderer = await StillImageRenderer.createInstance();
+final png = await renderer.render(
+  style: const MapStyle.url('https://example.com/style.json'),
+  size: const Size(512, 512),
+  pixelRatio: 2,
+  camera: const CameraUpdate.position(
+    center: Geographic(lon: 11.4, lat: 47.3),
+    zoom: 13,
+    pitch: 50,
+  ),
+  terrain: const Terrain(sourceId: 'dem'),
+  timeout: const Duration(seconds: 20),
+);
+renderer.dispose();
+```
+
+With a `terrain`, whose source must be in the style, the center of the camera
+moves onto the ground, as on a map with `centerClampedToGround`, which takes at
+least one more render. Without that, an image over high ground would have its
+camera under the terrain and show only the style's background. Pass
+`centerAltitude`, in meters above sea level, to place the center yourself.
+
+An image that can't be drawn fails with a `StillImageException`: a style, sprite
+or glyph range it needs is missing, or the renderer was disposed. One that takes
+longer than `timeout` fails with a `TimeoutException`. Requests may overlap.
+
 ## Managing Offline Regions
 
 After regions are downloaded, they can be managed using methods to list, merge,

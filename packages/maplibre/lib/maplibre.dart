@@ -175,6 +175,8 @@ export 'package:maplibre_platform_interface/maplibre_platform_interface.dart'
         RequestHeaders,
         Source,
         SourceFeature,
+        StillImageException,
+        StillImageRenderer,
         StringExpression,
         StyleController,
         StyleEnum,

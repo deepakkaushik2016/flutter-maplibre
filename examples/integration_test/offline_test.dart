@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
-import 'shared/still_image.dart';
+import 'shared/still_png.dart';
 import 'shared/test_map.dart';
 
 void main() {
@@ -356,24 +357,30 @@ void runTests() {
         addTearDown(MapLibreNetwork.reset);
         // Far from the label at 0, 0. At zoom 1.5 the 256 px tiles of zoom 2
         // show, and none of them was downloaded.
-        final still = await StillImageMap.open(
-          styleUrl: server.styleUrl,
-          center: const Geographic(lon: 40, lat: 40),
-          zoom: 1.5,
-        );
-        addTearDown(still.close);
+        final renderer = await StillImageRenderer.createInstance();
+        addTearDown(renderer.dispose);
+        Future<List<int>> centerColor() async {
+          final png = await renderer.render(
+            style: MapStyle.url(server.styleUrl),
+            size: const ui.Size(64, 64),
+            camera: const CameraUpdate.position(
+              center: Geographic(lon: 40, lat: 40),
+              zoom: 1.5,
+            ),
+            timeout: const Duration(seconds: 20),
+          );
+          return (await decodeStill(png)).colorAt(32, 32);
+        }
 
         // The still finishes without the tile it lacks, and draws its parent
         // from the region instead. No request reached the network.
-        await still.render().timeout(const Duration(seconds: 20));
+        expect(await centerColor(), [255, 0, 0, 255]);
         expect(server.requests['tiles'], downloaded);
-        expect(await still.pixel(32, 32), [255, 0, 0, 255]);
 
         // Back online, the next still waits for the tile and draws it.
         MapLibreNetwork.status = NetworkStatus.online;
-        await still.render().timeout(const Duration(seconds: 20));
+        expect(await centerColor(), [0, 255, 0, 255]);
         expect(server.requests['tiles'], greaterThan(downloaded!));
-        expect(await still.pixel(32, 32), [0, 255, 0, 255]);
       },
     );
 

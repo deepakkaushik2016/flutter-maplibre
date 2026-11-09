@@ -633,6 +633,19 @@ Each entry: the decision, then why.
   (the one `defaultMapLibreGlVersion` resolves to): raise the pin, and run
   it, when gl-js changes how it covers a missing tile.
 
+- **`StillImageRenderer` makes each image a static map with an offscreen
+  session of its own, on one runtime of the renderer, and returns a PNG.** A
+  static map has its own camera clamp setting, which is off by default, so a
+  still over high ground would put the camera under the terrain and draw only
+  the background. The renderer turns the clamp on unless the caller gives
+  `centerAltitude`; on maps without terrain the clamp does nothing. Style
+  commands complete only once the document parsed, so the renderer awaits them
+  instead of following map events. `timeout` and `dispose` end a request at
+  once with their own error and release its session and map, which cancels a
+  still that is still running. It is not on web:
+  a faithful still there needs a second WebGL context in a hidden container and
+  the map state's routing of sparse raster-dem tiles.
+
 ## Gestures
 
 - **Two options decide what gestures do: `MapOptions.movements`

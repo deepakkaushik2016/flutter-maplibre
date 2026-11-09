@@ -60,6 +60,58 @@ extension MapLibreMapExt on MapLibreMap {
           : mln.RuntimeEventFlag.none);
 }
 
+/// Extension methods for the [CameraUpdate] class.
+extension CameraUpdateExt on CameraUpdate {
+  /// The native camera that this update moves [map] to.
+  Future<mln.CameraOptions> toMln(mln.MapHandle map) async {
+    final update = this;
+    switch (update) {
+      case CameraUpdatePosition(:final center, :final padding, :final anchor):
+        return mln.CameraOptions(
+          center: center?.toMln(),
+          zoom: update.zoom,
+          bearing: update.bearing,
+          pitch: update.pitch,
+          roll: update.roll,
+          padding: padding?.toMln(),
+          anchor: anchor?.toMln(),
+        );
+      case CameraUpdateFit():
+        final fitOptions = mln.CameraFitOptions(
+          padding: update.padding.toMln(),
+          bearing: update.bearing,
+          pitch: update.pitch,
+        );
+        final camera = await switch (update) {
+          CameraUpdateBounds(:final bounds) => map.cameraForLatLngBounds(
+            bounds.toMln(),
+            fitOptions: fitOptions,
+          ),
+          CameraUpdatePoints(:final points) =>
+            points.isEmpty
+                ? throw ArgumentError.value(
+                    points,
+                    'points',
+                    'must not be empty',
+                  )
+                : map.cameraForLatLngs([
+                    for (final point in points) point.toMln(),
+                  ], fitOptions: fitOptions),
+          CameraUpdateGeometry(:final geometry) => map.cameraForGeometry(
+            jsonDecode(geometry.toText()),
+            fitOptions: fitOptions,
+          ),
+        };
+        final maxZoom = update.maxZoom;
+        final zoom = camera.zoom;
+        if (maxZoom != null && zoom != null && zoom > maxZoom) {
+          return camera.copyWith(zoom: maxZoom);
+        }
+        return camera;
+    }
+  }
+}
+
 /// Extension methods for the [StyleImageOptions] class.
 extension StyleImageOptionsExt on StyleImageOptions {
   /// These options for an image of [pixelRatio].

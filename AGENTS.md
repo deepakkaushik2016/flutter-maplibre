@@ -30,8 +30,9 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
     drives the session the same way everywhere; each platform's
     `FrameTarget` (`lib/src/<platform>/*_target.dart`) owns its texture and
     plugin calls.
-  - `lib/src/database.dart`: the database that every map and the
-    `OfflineManager` (`lib/src/offline_manager.dart`) share.
+  - `lib/src/database.dart`: the database that every map, the
+    `OfflineManager` (`lib/src/offline_manager.dart`) and the
+    `StillImageRenderer` (`lib/src/still_image.dart`) share.
   - `desktop/`: C++ shared by the Windows and Linux plugins: the C API
     `desktop/include/maplibre_native/maplibre_native_api.h`, bound in
     `lib/src/desktop/bindings.g.dart`. Maps render on a Vulkan device that
@@ -59,9 +60,8 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   it and measures frame times for `terrain_soak_test.dart` and
   `terrain_perf_test.dart`, which run on their own, not in `all_test.dart`.
   `shared/engine_state.dart` reads back what MapLibre Native applied to a
-  map, below the public API. `shared/still_image.dart` renders still images
-  of a static map on the shared database, also below the public API, for
-  `offline_test.dart`.
+  map, below the public API. `shared/still_png.dart` decodes still images
+  for `still_image_test.dart` and `offline_test.dart`.
   `user_location_test.dart` reads the frame's pixels back to find what
   the map drew: Flutter's layer on native, the gl-js canvas on web
   (`shared/browser.dart`). `lib/utils/simulated_locations.dart` walks a simulated

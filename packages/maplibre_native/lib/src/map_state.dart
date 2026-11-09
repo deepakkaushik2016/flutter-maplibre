@@ -182,7 +182,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
     mln.MapHandle map,
     CameraUpdate initCamera,
   ) async {
-    final camera = await _cameraOptions(map, initCamera);
+    final camera = await initCamera.toMln(map);
     await map.updateCamera(mln.CameraUpdate(camera: camera));
   }
 
@@ -735,7 +735,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
   Future<void> moveCamera(CameraUpdate update) async {
     final map = _map;
     if (map == null) return;
-    final camera = await _cameraOptions(map, update);
+    final camera = await update.toMln(map);
     if (_map != map) return;
     // A jump would replace a running animation, which then counts as
     // completed, so it is cancelled first.
@@ -750,7 +750,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
   }) async {
     final map = _map;
     if (map == null) return CameraAnimationResult.cancelled;
-    final camera = await _cameraOptions(map, update);
+    final camera = await update.toMln(map);
     if (_map != map) return CameraAnimationResult.cancelled;
     return _submitCamera(
       map,
@@ -775,7 +775,7 @@ class MapLibreMapStateNative extends MapLibreMapState {
       throw StateError('The map has not been created yet.');
     }
     final current = getCamera();
-    final camera = await _cameraOptions(map, update);
+    final camera = await update.toMln(map);
     final center = camera.center;
     final padding = camera.padding;
     return CameraPosition(
@@ -786,57 +786,6 @@ class MapLibreMapStateNative extends MapLibreMapState {
       roll: camera.roll ?? current.roll,
       padding: padding?.toEdgeInsets() ?? current.padding,
     );
-  }
-
-  /// The native camera that [update] moves [map] to.
-  static Future<mln.CameraOptions> _cameraOptions(
-    mln.MapHandle map,
-    CameraUpdate update,
-  ) async {
-    switch (update) {
-      case CameraUpdatePosition(:final center, :final padding, :final anchor):
-        return mln.CameraOptions(
-          center: center?.toMln(),
-          zoom: update.zoom,
-          bearing: update.bearing,
-          pitch: update.pitch,
-          roll: update.roll,
-          padding: padding?.toMln(),
-          anchor: anchor?.toMln(),
-        );
-      case CameraUpdateFit():
-        final fitOptions = mln.CameraFitOptions(
-          padding: update.padding.toMln(),
-          bearing: update.bearing,
-          pitch: update.pitch,
-        );
-        final camera = await switch (update) {
-          CameraUpdateBounds(:final bounds) => map.cameraForLatLngBounds(
-            bounds.toMln(),
-            fitOptions: fitOptions,
-          ),
-          CameraUpdatePoints(:final points) =>
-            points.isEmpty
-                ? throw ArgumentError.value(
-                    points,
-                    'points',
-                    'must not be empty',
-                  )
-                : map.cameraForLatLngs([
-                    for (final point in points) point.toMln(),
-                  ], fitOptions: fitOptions),
-          CameraUpdateGeometry(:final geometry) => map.cameraForGeometry(
-            jsonDecode(geometry.toText()),
-            fitOptions: fitOptions,
-          ),
-        };
-        final maxZoom = update.maxZoom;
-        final zoom = camera.zoom;
-        if (maxZoom != null && zoom != null && zoom > maxZoom) {
-          return camera.copyWith(zoom: maxZoom);
-        }
-        return camera;
-    }
   }
 
   /// Counts [_setStyle] calls, so a style that loads after a newer one was

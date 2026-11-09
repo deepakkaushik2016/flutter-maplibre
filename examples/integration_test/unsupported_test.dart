@@ -21,6 +21,14 @@ void runTests() {
       );
     }, skip: !kIsWeb);
 
+    test('StillImageRenderer on web', () async {
+      expect(StillImageRenderer.isSupported, isFalse);
+      await expectLater(
+        StillImageRenderer.createInstance(),
+        throwsA(isA<UnsupportedError>()),
+      );
+    }, skip: !kIsWeb);
+
     testWidgets('the globe projection on native keeps Mercator', (
       tester,
     ) async {
