@@ -5,6 +5,7 @@ import 'darwin_texture_test.dart' as darwin_texture;
 import 'events_test.dart' as events;
 import 'features_test.dart' as features;
 import 'follow_camera_test.dart' as follow_camera;
+import 'frame_pacing_test.dart' as frame_pacing;
 import 'gestures_test.dart' as gestures;
 import 'layers_test.dart' as layers;
 import 'map_test.dart' as map;
@@ -40,6 +41,7 @@ void main() {
   ui.runTests();
   user_location.runTests();
   follow_camera.runTests();
+  frame_pacing.runTests();
   offline.runTests();
   still_image.runTests();
   paused.runTests();

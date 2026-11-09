@@ -6,6 +6,7 @@ import 'package:maplibre_native/src/android/android_target.dart';
 import 'package:maplibre_native/src/darwin/darwin_target.dart';
 import 'package:maplibre_native/src/database.dart';
 import 'package:maplibre_native/src/desktop/desktop_target.dart';
+import 'package:maplibre_native/src/frame_pacer.dart';
 import 'package:maplibre_native/src/frame_target.dart';
 import 'package:maplibre_native_ffi/maplibre_native_ffi.dart';
 
@@ -57,6 +58,7 @@ final class MapRenderer implements FrameTargetHost {
     this._extent,
   ) {
     _target.host = this;
+    _pacer = FramePacer(schedule: _clock.schedule, demand: demandFrame);
   }
 
   final RuntimeHandle _runtime;
@@ -73,6 +75,10 @@ final class MapRenderer implements FrameTargetHost {
   var _nextToken = 1;
   int? _pendingToken;
   var _disposed = false;
+
+  /// Keeps the session from rendering frames that the display can't show.
+  late final FramePacer _pacer;
+  final _clock = FlutterFrameClock();
   LogicalExtent _extent;
   LogicalExtent? _pendingExtent;
   var _resizing = false;
@@ -143,6 +149,10 @@ final class MapRenderer implements FrameTargetHost {
   /// The current logical extent of the map.
   @override
   LogicalExtent get extent => _pendingExtent ?? _extent;
+
+  /// How many map frames every renderer of the process rendered.
+  @visibleForTesting
+  static int debugRenderedFrames = 0;
 
   /// Receives every runtime event the map queues.
   void Function(RuntimeEvent event)? onEvent;
@@ -311,6 +321,7 @@ final class MapRenderer implements FrameTargetHost {
     if (result == null) return;
     _pendingToken = null;
     if (result.disposition == RenderResult.rendered) {
+      debugRenderedFrames++;
       final frame = result;
       unawaited(onGpuQueue(() => _present(frame)));
     } else if (result.disposition == RenderResult.targetNotReady) {
@@ -325,8 +336,9 @@ final class MapRenderer implements FrameTargetHost {
     }
   }
 
-  /// Hands the latest frame to Flutter through the target, then demands the
-  /// next one.
+  /// Hands the latest frame to Flutter through the target, then has the
+  /// [FramePacer] demand the next one: at once while a refresh passed since
+  /// the last demand, else at the next refresh.
   Future<void> _present(RenderFrameResult result) async {
     try {
       if (_disposed) return;
@@ -334,7 +346,7 @@ final class MapRenderer implements FrameTargetHost {
     } on Object catch (error) {
       debugPrint('maplibre_native: present failed: $error');
     } finally {
-      demandFrame();
+      if (!_disposed) _pacer.frameEnded();
     }
   }
 
@@ -354,6 +366,7 @@ final class MapRenderer implements FrameTargetHost {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _clock.cancel();
     // A frame in presentation is released before the session goes.
     await _gpuQueue;
     await _target.endSession(_session);

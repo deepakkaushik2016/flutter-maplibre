@@ -239,6 +239,19 @@ Each entry: the decision, then why.
   does and the setup guide tells apps to. Not yet verified on a device: the
   iPhone 17 Pro Max ran Flutter at 60 Hz with the key set (Plan 02 Task 5),
   which is unexplained.
+- **`FramePacer` holds the map to one render per display refresh.** The
+  session demands the next frame as soon as a frame ends, and nothing stops
+  it: without a ring slot limit (the Darwin ring's fourth slot, 02d8a14) or
+  a swapchain (Android's SurfaceProducer never waits), the map renders as
+  fast as the GPU allows. Each demand needs a refresh's credit, granted by
+  Flutter's frame clock (`FlutterFrameClock`). A frame that ends after a
+  refresh passed demands the next at once, so a frame longer than a refresh
+  renders back to back rather than halving the rate, which is the fourth
+  slot's point. The pacer lives in the plugin, not in the C library's
+  `mln_*_frame_pacer`: that one demands at the next display refresh after an
+  update and has no way to catch up after a long frame, and it would replace
+  the token-and-`waitForUpdate` demand loop that tells this plugin which
+  result is which.
 - **Dart finds the C API through `+[MaplibreNativePlugin symbols]`, called
   with `objc_msgSend`, not `DynamicLibrary.process()`.** SwiftPM links the
   plugin statically into the app, and release builds strip global symbols

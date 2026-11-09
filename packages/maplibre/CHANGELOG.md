@@ -73,6 +73,10 @@
 
 ### Performance
 
+- Maps render at most one frame per display refresh on iOS, macOS and
+  Android, 60 Hz or 120 Hz, so an animating map no longer renders frames that
+  the display can't show, while a frame longer than a refresh still renders
+  back to back. A map at rest renders nothing, as before.
 - iOS and macOS: a map's texture ring has a fourth slot, so the map renders
   its next frame right after a present instead of waiting for Flutter's next
   vsync. Maps whose frames took more than the rest of a vsync ran at half the
