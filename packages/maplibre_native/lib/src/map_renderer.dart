@@ -378,6 +378,7 @@ final class MapRenderer implements FrameTargetHost {
   /// A gesture changed the camera: its frame shouldn't wait for the pacing
   /// delay of an animation's frames.
   void expediteFrame() {
+    if (_disposed) return;
     _pacer.expedite();
     _resync();
   }
@@ -414,6 +415,7 @@ final class MapRenderer implements FrameTargetHost {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _pacer.dispose();
     _clock.cancel();
     // A frame in presentation is released before the session goes.
     await _gpuQueue;

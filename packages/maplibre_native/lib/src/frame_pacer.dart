@@ -126,12 +126,22 @@ final class FramePacer {
   Duration? _lastDemand;
   Duration _interval;
 
+  /// Whether [dispose] ended the pacer, which starts nothing from then on.
+  var _disposed = false;
+
+  /// Stops the pacer: no later call demands a frame or starts a timer.
+  void dispose() {
+    _disposed = true;
+    _delayGeneration++;
+  }
+
   /// Whether the pacer has no demand waiting to go out.
   bool get idle => !_waiting && !_delaying;
 
   /// Tells the pacer that the frame it demanded last rendered and ended, and
   /// that the next one is due.
   void frameEnded() {
+    if (_disposed) return;
     _skipped = 0;
     _next();
   }
@@ -139,6 +149,7 @@ final class FramePacer {
   /// Tells the pacer that the demand ended without a frame. Paced like one
   /// that rendered, and after a few in a row with a growing delay.
   void frameSkipped() {
+    if (_disposed) return;
     if (_delaying) return;
     _skipped++;
     if (_skipped > _skipsBeforeBackoff) {
@@ -193,6 +204,7 @@ final class FramePacer {
   /// as soon as the display can show one more, without the delay, also when
   /// the gesture arrives with a frame in flight.
   void expedite() {
+    if (_disposed) return;
     if (_delaying) {
       _delayGeneration++;
       _delaying = false;
@@ -206,6 +218,7 @@ final class FramePacer {
   /// Demands a frame for a renderer that has none in flight and nothing
   /// armed, so a touch or an event always gets the map going again.
   void resync() {
+    if (_disposed) return;
     _demandNext();
     _askForRefresh();
   }
@@ -247,6 +260,7 @@ final class FramePacer {
 
   /// A Flutter frame arrived with no refresh asked for: only its time counts.
   void noteDisplayFrame() {
+    if (_disposed) return;
     _standIns = 0;
     _learn(now());
   }
@@ -271,6 +285,7 @@ final class FramePacer {
 
   void _onRefresh({bool fromDisplay = true}) {
     _scheduled = false;
+    if (_disposed) return;
     final time = now();
     if (fromDisplay) {
       _standIns = 0;

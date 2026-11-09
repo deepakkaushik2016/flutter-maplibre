@@ -280,6 +280,37 @@ void main() {
       });
     });
 
+    test('a disposed pacer starts nothing', () {
+      final ticks = <RefreshCallback>[];
+      final delays = <void Function()>[];
+      var demands = 0;
+      final pacer = FramePacer(
+        schedule: (tick, _) => ticks.add(tick),
+        demand: () {
+          demands++;
+          return true;
+        },
+        now: () => Duration.zero,
+        delay: (_, callback) => delays.add(callback),
+      )..frameEnded();
+      // Waits for the refresh, then for the delay after it.
+      pacer.frameEnded();
+      ticks.removeAt(0)();
+      expect(delays, hasLength(1));
+      ticks.clear();
+      pacer.dispose();
+
+      delays.removeAt(0)();
+      pacer
+        ..expedite()
+        ..resync()
+        ..frameEnded()
+        ..frameSkipped();
+      expect(demands, 1);
+      expect(ticks, isEmpty);
+      expect(delays, isEmpty);
+    });
+
     group('lost demands', () {
       late List<RefreshCallback> ticks;
       late List<(Duration, void Function())> delays;
