@@ -283,12 +283,17 @@ class TestMap {
 }
 
 /// Shows a [MapLibreMap] with [options] and waits until its style has loaded.
+///
+/// Unless [retainEvents] is false, [TestMap.events] keeps every event for
+/// the life of the test. A long run turns that off: a moving map reports
+/// many camera moves a second, and keeping them grows the heap steadily.
 Future<TestMap> pumpMap(
   WidgetTester tester, {
   MapOptions? options,
   List<Layer> layers = const [],
   List<Widget> children = const [],
   bool paused = false,
+  bool retainEvents = true,
 }) async {
   final events = <MapEvent>[];
   final lifecycle = <MapLifecycle>[];
@@ -305,7 +310,7 @@ Future<TestMap> pumpMap(
       lifecycle.add(MapLifecycle.styleLoaded);
       if (!style.isCompleted) style.complete(style_);
     },
-    onEvent: events.add,
+    onEvent: retainEvents ? events.add : (_) {},
     paused: paused,
     children: children,
   );

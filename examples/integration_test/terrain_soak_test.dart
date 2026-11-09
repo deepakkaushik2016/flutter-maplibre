@@ -19,7 +19,6 @@ import 'package:maplibre/maplibre.dart';
 
 import 'shared/alps_fixture.dart';
 import 'shared/terrain_load.dart';
-import 'shared/test_map.dart';
 
 /// How long the soak runs. RSS is sampled once a minute.
 const _minutes = int.fromEnvironment('TERRAIN_SOAK_MINUTES', defaultValue: 10);
@@ -82,13 +81,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
       sourceId: 'alps',
       exaggeration: _exaggerations[exaggeration++ % _exaggerations.length],
     );
-    final map = await pumpMap(
-      tester,
-      options: MapOptions(
-        style: MapStyle.json(jsonEncode(trailStyle(fixture.style()))),
-        initCamera: alpsCamera,
-      ),
-    );
+    final map = await pumpSoakMap(tester, fixture);
     await map.style.setTerrain(terrain());
     await map.pumpUntil(
       () => fixture.demRequests > 0,

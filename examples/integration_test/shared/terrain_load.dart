@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre/maplibre.dart';
 
-import 'alps_dem.dart';
+import 'alps_fixture.dart';
+import 'test_map.dart';
 
 /// A style of the terrain soak and performance tests: [style] with a
 /// hillshade of its raster DEM source [demId] and a trail over the ridge, so
@@ -29,6 +32,18 @@ Map<String, Object?> trailStyle(
     },
   ],
 };
+
+/// Shows the map of the terrain soak: the trail style over [fixture]'s DEM,
+/// at the crest of the ridge.
+Future<TestMap> pumpSoakMap(WidgetTester tester, AlpsFixture fixture) =>
+    pumpMap(
+      tester,
+      options: MapOptions(
+        style: MapStyle.json(jsonEncode(trailStyle(fixture.style()))),
+        initCamera: alpsCamera,
+      ),
+      retainEvents: false,
+    );
 
 /// A trail from the southern valley over the crest, along [scrubPath].
 final Map<String, Object?> _trail = {

@@ -12,6 +12,7 @@ import 'package:maplibre/maplibre.dart';
 
 import 'shared/alps_fixture.dart';
 import 'shared/browser.dart';
+import 'shared/terrain_load.dart' show flyOverRidge, pumpSoakMap;
 import 'shared/test_map.dart';
 
 void main() {
@@ -179,6 +180,29 @@ MapOptions _options(MapStyle style) =>
     MapOptions(style: style, initCamera: const CameraUpdate.position(zoom: 4));
 
 void runTests() {
+  // Over a soak, a map reports about 156 camera moves a second on a phone.
+  // Kept, they read as a leak in the soak's RSS.
+  testWidgets('the soak map keeps no events of a flight', (tester) async {
+    final fixture = await AlpsFixture.start();
+    addTearDown(fixture.close);
+    final map = await pumpSoakMap(tester, fixture);
+    final before = map.controller.camera;
+    final stop = Completer<void>();
+    final flight = flyOverRidge(
+      map.controller,
+      pitch: 60,
+      stop: stop.future,
+      leg: const Duration(milliseconds: 300),
+    );
+    await map.pumpUntil(
+      () => map.controller.camera != before,
+      reason: () => 'the flight never moved the camera',
+    );
+    stop.complete();
+    await map.pumpFuture(flight, reason: 'the last flight leg never ended');
+    expect(map.events, isEmpty);
+  });
+
   group('terrain', () {
     late _Fixture fixture;
     setUp(() async {
