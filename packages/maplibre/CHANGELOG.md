@@ -74,7 +74,7 @@
 ### Performance
 
 - Maps render at most one frame per display refresh on iOS, macOS and
-  Android, 60 Hz or 120 Hz, so an animating map no longer renders frames that
+  Android, at the display's own rate (measured on a 60 Hz phone), so an animating map no longer renders frames that
   the display can't show, while a frame longer than a refresh still renders
   back to back. A map at rest renders nothing, as before.
 - iOS and macOS: a map's texture ring has a fourth slot, so the map renders
