@@ -1,4 +1,5 @@
 import 'package:maplibre_native/src/android/android_plugin.dart';
+import 'package:maplibre_native/src/android/surface_tracker.dart';
 import 'package:maplibre_native/src/frame_target.dart';
 import 'package:maplibre_native_ffi/maplibre_native_ffi.dart';
 
@@ -14,47 +15,61 @@ FrameTarget createAndroidTarget(LogicalExtent extent) {
 final class _SurfaceTarget extends FrameTarget {
   _SurfaceTarget(LogicalExtent extent) {
     final (width, height) = physicalSize(extent);
+    _surface = SurfaceTracker(
+      setSurface: (host) => _setSurface(_session, host.extent),
+      releaseTarget: () => _session.releaseTarget(),
+    );
     _texture = AndroidPlugin.createSurfaceTexture(
       width,
       height,
-      onSurfaceAvailable: _onSurfaceAvailable,
-      onSurfaceCleanup: _onSurfaceCleanup,
+      onSurfaceAvailable: _surface.back,
+      onSurfaceCleanup: _surface.lost,
     );
   }
 
   late final SurfaceTexture _texture;
 
-  RenderSessionHandle? _session;
+  late RenderSessionHandle _session;
 
   /// Whether the Surface accepts frames. Flutter takes it away while the app
   /// is in the background.
-  var _surfaceAvailable = true;
+  late final SurfaceTracker _surface;
+
+  @override
+  set host(FrameTargetHost? host) {
+    super.host = host;
+    _surface.host = host;
+  }
 
   @override
   int get textureId => _texture.textureId;
 
   @override
-  bool get acceptsFrames => _surfaceAvailable;
+  bool get acceptsFrames => _surface.available;
 
   @override
   RenderSessionHandle attach(
     MapHandle map,
     LogicalExtent extent,
     Wake frameWake,
-  ) => _session = AndroidPlugin.withSurface<RenderSessionHandle>(
-    textureId,
-    (jniEnv, surface) => map.attachAndroidSurface(
-      AndroidSurfaceDescriptor(
-        logicalSize: logicalSize(extent),
-        jniEnv: jniEnv,
-        surface: surface,
+  ) {
+    _session = AndroidPlugin.withSurface<RenderSessionHandle>(
+      textureId,
+      (jniEnv, surface) => map.attachAndroidSurface(
+        AndroidSurfaceDescriptor(
+          logicalSize: logicalSize(extent),
+          jniEnv: jniEnv,
+          surface: surface,
+        ),
+        RenderSessionAttachOptions(
+          driver: RenderDriverKind.coreWorker,
+          frameWake: frameWake,
+        ),
       ),
-      RenderSessionAttachOptions(
-        driver: RenderDriverKind.coreWorker,
-        frameWake: frameWake,
-      ),
-    ),
-  );
+    );
+    _surface.attached();
+    return _session;
+  }
 
   /// Sizes the SurfaceProducer's buffers and the session. Flutter may hand
   /// out a new Surface for the new size, which the session then moves to.
@@ -88,31 +103,6 @@ final class _SurfaceTarget extends FrameTarget {
           ),
         ),
       );
-
-  /// The Surface goes away, e.g. when the app moves to the background: the
-  /// session lets go of it, and frames pause until it is back. The session
-  /// keeps its own reference to the window, so a frame in flight finishes.
-  void _onSurfaceCleanup() {
-    _surfaceAvailable = false;
-    final host = this.host;
-    final session = _session;
-    if (host == null || host.disposed || session == null) return;
-    host.onGpuQueue(session.releaseTarget).ignore();
-  }
-
-  /// The Surface is back, maybe as a new one: the session presents to it and
-  /// rendering resumes.
-  void _onSurfaceAvailable() {
-    final host = this.host;
-    final session = _session;
-    if (host == null || host.disposed || session == null) return;
-    host.onGpuQueue(() async {
-      if (host.disposed) return;
-      await _setSurface(session, host.extent);
-      _surfaceAvailable = true;
-      host.demandFrame();
-    }).ignore();
-  }
 
   /// The session closed, so nothing presents to the surface anymore.
   @override
