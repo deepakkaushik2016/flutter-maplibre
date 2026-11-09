@@ -62,6 +62,7 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   `shared/engine_state.dart` reads back what MapLibre Native applied to a
   map, below the public API. `shared/still_png.dart` decodes still images
   for `still_image_test.dart` and `offline_test.dart`.
+  `follow_camera_test.dart` replays GPS fixes over the terrain.
   `user_location_test.dart` reads the frame's pixels back to find what
   the map drew: Flutter's layer on native, the gl-js canvas on web
   (`shared/browser.dart`). `lib/utils/simulated_locations.dart` walks a simulated
