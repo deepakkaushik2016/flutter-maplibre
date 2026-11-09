@@ -218,7 +218,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
           // A style change may have removed or replaced a source, whose
           // tiles then no longer load through the sparse-dem protocol.
           if (event.dataType == 'style') {
-            _rasterDemTiles.refresh(_map.getSource);
+            _rasterDemTiles.refresh((id) => _map.getSource(id));
           }
           if (event.sourceDataType == 'metadata') {
             style?.refreshTileJson();
@@ -902,7 +902,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     knownEmptyTiles.clear();
     _map.setStyle(_jsStyle(style));
     _onLoadingStarted();
-    _rasterDemTiles.refresh(_map.getSource);
+    _rasterDemTiles.refresh((id) => _map.getSource(id));
     // gl-js diffs a JSON style at once. A diff without changes, or a style
     // that fails to validate, keeps the loaded style and fires no
     // `style.load`, so the terrain set meanwhile goes to that style. Before
