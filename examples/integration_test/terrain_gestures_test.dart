@@ -112,6 +112,17 @@ void runTests() {
         ground.groundAt(point + offset),
     ];
 
+    testWidgets('a map counts as settled once it draws its slow DEM', (
+      tester,
+    ) async {
+      await fixture.close();
+      // Longer than the frames waitUntilSettled needs to see a still view.
+      fixture = await AlpsFixture.start(demDelay: const Duration(seconds: 2));
+      final (map, ground) = await pumpTerrainMap(tester);
+      final shown = ground.toScreen(map.controller.camera!.center);
+      expect((shown - map.center).distance, lessThan(_tolerance));
+    }, skip: kIsWeb);
+
     testWidgets('GroundView finds the ground that the map draws', (
       tester,
     ) async {

@@ -28,15 +28,20 @@ const alpsCamera = CameraUpdate.position(
 /// browser, which has no server, they are assets of the app, whose requests
 /// the browser's resource timing counts.
 class AlpsFixture {
-  AlpsFixture._(this._server) {
+  AlpsFixture._(this._server, this._demDelay) {
     _server?.listen(_serve);
   }
 
-  static Future<AlpsFixture> start() async => AlpsFixture._(
-    kIsWeb ? null : await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
-  );
+  /// Starts serving. On native, each DEM tile is answered [demDelay] after
+  /// its request, as on a slow connection or a busy machine.
+  static Future<AlpsFixture> start({Duration demDelay = Duration.zero}) async =>
+      AlpsFixture._(
+        kIsWeb ? null : await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
+        demDelay,
+      );
 
   final HttpServer? _server;
+  final Duration _demDelay;
   var _requests = 0;
 
   static String _asset(int x, int y) =>
@@ -96,6 +101,7 @@ class AlpsFixture {
         tileY >= y.$1 &&
         tileY <= y.$2) {
       _requests++;
+      await Future<void>.delayed(_demDelay);
       final bytes = await rootBundle.load(_asset(tileX, tileY));
       response.headers.contentType = ContentType('image', 'png');
       response.add(bytes.buffer.asUint8List());
@@ -121,6 +127,9 @@ class AlpsFixture {
       () => demRequests > 0,
       reason: () => 'the terrain never loaded the DEM',
     );
+    // A request is not yet ground. Until a tile is drawn the view stands
+    // still at sea level, and ten still frames would pass for settled.
+    await map.waitForTerrainAt(map.center);
     final point = ground.groundAt(map.center);
     var last = ground.toScreen(point);
     var stable = 0;

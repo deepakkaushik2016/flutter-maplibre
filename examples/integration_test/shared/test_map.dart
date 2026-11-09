@@ -258,6 +258,20 @@ class TestMap {
     }
   }
 
+  /// Waits until the latest frame has ground of a loaded DEM tile at [point].
+  Future<void> waitForTerrainAt(
+    Offset point, {
+    Duration timeout = defaultTimeout,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (await controller.toLngLatOnTerrain(point) == null) {
+      if (DateTime.now().isAfter(deadline)) {
+        fail('The terrain never drew a DEM tile at $point');
+      }
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
   /// Waits until a feature query at [point] finds what [matches] accepts.
   /// Rendering is asynchronous, so a feature appears a few frames after its
   /// source or layer was added.
