@@ -1005,6 +1005,7 @@ class _NativeGestureCamera implements GestureCameraSink {
 
   @override
   void gestureUpdate(GestureCameraUpdate update) {
+    _state._renderer?.expediteFrame();
     final scales = update.zoomBy != 0;
     final rotates = update.rotateBy != 0;
     final tilts = update.pitchBy != 0;

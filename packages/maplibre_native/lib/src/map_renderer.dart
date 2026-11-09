@@ -342,6 +342,10 @@ final class MapRenderer implements FrameTargetHost {
     }
   }
 
+  /// A gesture changed the camera: its frame shouldn't wait for the pacing
+  /// delay of an animation's frames.
+  void expediteFrame() => _pacer.expedite();
+
   /// Hands the latest frame to Flutter through the target, then has the
   /// [FramePacer] demand the next one: at once while a refresh passed since
   /// the last demand, else at the next refresh.

@@ -247,9 +247,10 @@ Each entry: the decision, then why.
   Flutter's frame clock (`FlutterFrameClock`). A frame longer than a refresh
   demands the next at once, so long frames render back to back rather than
   halving the rate, which is the fourth slot's point. A shorter frame's next
-  demand goes out two thirds of a refresh after the last refresh, not at the
-  refresh: demanded at the refresh, 3D frames on an iPhone 15 Plus missed the
-  next vsync about 10 % of the time (p95 16.8 to 33.3 ms). The pacer lives in the plugin, not in the C library's
+  demand goes out half a refresh after the last refresh, not at the refresh:
+  demanded at the refresh, 3D frames on an iPhone 15 Plus missed the next
+  vsync about 10 % of the time (p95 16.8 to 33.3 ms). A gesture's frame skips
+  that delay (`expedite`), so a drag keeps the next-refresh latency. The pacer lives in the plugin, not in the C library's
   `mln_*_frame_pacer`: that one demands at the next display refresh after an
   update and has no way to catch up after a long frame, and it would replace
   the token-and-`waitForUpdate` demand loop that tells this plugin which

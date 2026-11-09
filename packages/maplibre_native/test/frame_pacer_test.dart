@@ -100,11 +100,11 @@ void main() {
 
     test('a short frame starts before the coming refresh, not at it', () {
       final sim = _Simulation(1000 / 60, 4)..fly(1000);
-      // Past the warm-up, each demand falls about a third of a refresh ahead
-      // of a refresh, so the frame ends well before the refresh after it.
+      // Past the warm-up, each demand falls about half a refresh after a
+      // refresh, so the frame lands well clear of the refreshes around it.
       for (final time in sim.demandTimes.skip(4)) {
         final phase = time % (1000 / 60);
-        expect(phase, inInclusiveRange(10.0, 12.0), reason: 'at $time ms');
+        expect(phase, inInclusiveRange(7.5, 9.5), reason: 'at $time ms');
       }
     });
 
@@ -142,6 +142,58 @@ void main() {
       time += const Duration(seconds: 1);
       pacer.frameEnded();
       expect(demands, 2);
+    });
+
+    group('a gesture', () {
+      late List<void Function()> ticks;
+      late List<void Function()> delays;
+      late int demands;
+      late Duration time;
+      late FramePacer pacer;
+
+      setUp(() {
+        ticks = [];
+        delays = [];
+        demands = 0;
+        time = const Duration(seconds: 1);
+        pacer = FramePacer(
+          schedule: ticks.add,
+          demand: () => demands++,
+          now: () => time,
+          delay: (_, callback) => delays.add(callback),
+        )..frameEnded();
+        expect(demands, 1);
+      });
+
+      test('during the delay demands at once, and the delay does nothing', () {
+        time += const Duration(milliseconds: 4);
+        pacer.frameEnded(); // Waits for the refresh.
+        time += const Duration(milliseconds: 12);
+        ticks.removeAt(0)();
+        expect(delays, hasLength(1));
+        expect(demands, 1);
+        pacer.expedite();
+        expect(demands, 2);
+        delays.removeAt(0)();
+        expect(demands, 2);
+      });
+
+      test('before the refresh demands at the refresh, without a delay', () {
+        time += const Duration(milliseconds: 4);
+        pacer
+          ..frameEnded()
+          ..expedite();
+        expect(demands, 1, reason: 'no refresh passed since the last demand');
+        time += const Duration(milliseconds: 12);
+        ticks.removeAt(0)();
+        expect(demands, 2);
+        expect(delays, isEmpty);
+      });
+
+      test('with a frame in flight changes nothing', () {
+        pacer.expedite();
+        expect(demands, 1);
+      });
     });
 
     test('a refresh that a frame waited for demands it', () {

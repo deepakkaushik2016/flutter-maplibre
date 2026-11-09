@@ -13,12 +13,13 @@ typedef Delay = void Function(Duration duration, VoidCallback callback);
 ///
 /// A frame longer than a refresh demands the next one at once, so long
 /// frames render back to back instead of waiting for a refresh, which would
-/// halve the frame rate. A frame shorter than a refresh waits, and the next
-/// demand goes out two thirds of a refresh after the last refresh: demanded
-/// at the refresh itself, the 3D frames of an iPhone 15 Plus (13.9 ms from
-/// demand to shown at the median, 18 ms at p90) missed the next one about 10 %
-/// of the time. The cost is a third of a refresh of age for animated frames.
-/// Spacing the demands from the refreshes keeps them from bunching.
+/// halve the frame rate. A shorter frame's next demand goes out half a
+/// refresh after the last refresh. Demanded at the refresh itself, 3D frames
+/// on an iPhone 15 Plus (13.9 ms from demand to shown at the median, 18 ms at
+/// p90) land on either side of the next one, so they miss it or bunch; from
+/// the middle of a refresh they land on the same side. The cost is half a
+/// refresh of age for the frames of an animation. [expedite] takes that out
+/// for a gesture, whose frame goes out as soon as the display can show it.
 ///
 /// While the map is idle it asks for no refresh: the demand it has armed
 /// renders the map's next change the moment it comes.
@@ -60,6 +61,12 @@ final class FramePacer {
   /// Whether the next demand waits for its [delay].
   var _delaying = false;
 
+  /// Tells a [delay] that was overtaken by a gesture to do nothing.
+  var _delayGeneration = 0;
+
+  /// Whether a gesture waits for the next refresh's demand.
+  var _expedited = false;
+
   Duration? _lastRefresh;
   Duration? _lastDemand;
   Duration _interval = _defaultInterval;
@@ -85,15 +92,30 @@ final class FramePacer {
     }
   }
 
-  /// Demands the next frame [fromNow] plus two thirds of a refresh from now.
+  /// Demands the next frame [fromNow] plus half a refresh from now.
   void _delayDemand(Duration fromNow) {
-    final wait = fromNow + _interval * 2 ~/ 3;
+    final wait = fromNow + _interval ~/ 2;
+    final generation = ++_delayGeneration;
     _delaying = true;
     delay(wait.isNegative ? Duration.zero : wait, () {
+      if (generation != _delayGeneration) return;
       _delaying = false;
       _demandNext();
       _askForRefresh();
     });
+  }
+
+  /// Tells the pacer that a gesture changed the camera: its frame goes out
+  /// as soon as the display can show one more, without the delay.
+  void expedite() {
+    if (_delaying) {
+      _delayGeneration++;
+      _delaying = false;
+      _demandNext();
+      _askForRefresh();
+    } else if (_waiting) {
+      _expedited = true;
+    }
   }
 
   void _askForRefresh() {
@@ -105,6 +127,7 @@ final class FramePacer {
   void _demandNext() {
     _credit = false;
     _waiting = false;
+    _expedited = false;
     _lastDemand = now();
     demand();
   }
@@ -128,7 +151,9 @@ final class FramePacer {
     if (lastDemand != null && time - lastDemand < _interval * 2) {
       _askForRefresh();
     }
-    if (_waiting) {
+    if (_waiting && _expedited) {
+      _demandNext();
+    } else if (_waiting) {
       _waiting = false;
       _delayDemand(Duration.zero);
     } else {
