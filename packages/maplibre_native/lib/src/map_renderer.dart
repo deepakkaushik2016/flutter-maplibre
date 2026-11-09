@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:maplibre_native/src/android/android_target.dart';
 import 'package:maplibre_native/src/darwin/darwin_target.dart';
 import 'package:maplibre_native/src/database.dart';
@@ -60,10 +61,22 @@ final class MapRenderer implements FrameTargetHost {
     _target.host = this;
     _pacer = FramePacer(
       schedule: _clock.schedule,
-      demand: demandFrame,
+      demand: _armFrame,
       now: () => _watch.elapsed,
       delay: _clock.delay,
+      displayInterval: _displayInterval,
+      framesVisible: () => SchedulerBinding.instance.framesEnabled,
     );
+    _clock.onDisplayFrame = _pacer.noteDisplayFrame;
+  }
+
+  /// The refresh interval that Flutter reports for the display, if any.
+  static Duration? _displayInterval() {
+    final views = SchedulerBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return null;
+    final rate = views.first.display.refreshRate;
+    if (rate <= 0) return null;
+    return Duration(microseconds: (1000000 / rate).round());
   }
 
   final RuntimeHandle _runtime;
@@ -85,6 +98,9 @@ final class MapRenderer implements FrameTargetHost {
   late final FramePacer _pacer;
   final _clock = FlutterFrameClock();
   final _watch = Stopwatch()..start();
+
+  /// Whether a rendered frame is on its way to Flutter.
+  var _presenting = false;
   LogicalExtent _extent;
   LogicalExtent? _pendingExtent;
   var _resizing = false;
@@ -306,16 +322,36 @@ final class MapRenderer implements FrameTargetHost {
   /// Arms a demand that renders the map's next update, and waits for one
   /// when there is none yet.
   @override
-  void demandFrame() {
-    if (_disposed ||
-        _paused ||
-        _pendingToken != null ||
-        !_target.acceptsFrames) {
-      return;
-    }
+  void demandFrame() => _armFrame();
+
+  /// Arms a demand unless the renderer can't render now. Returns whether a
+  /// demand is armed, as one already pending also is.
+  bool _armFrame() {
+    if (_disposed || _paused || !_target.acceptsFrames) return false;
+    if (_pendingToken != null) return true;
     final token = _nextToken++;
     _pendingToken = token;
-    _session.demandFrame(FrameDemand(flags: _target.demandFlags, token: token));
+    try {
+      _session.demandFrame(
+        FrameDemand(flags: _target.demandFlags, token: token),
+      );
+    } on Object catch (error) {
+      _pendingToken = null;
+      debugPrint('maplibre_native: frame demand failed: $error');
+      return false;
+    }
+    return true;
+  }
+
+  /// Gets the map going again when nothing is under way: no demand armed,
+  /// no frame on its way to Flutter, and none waiting in the pacer. Normally
+  /// one of those holds; this is the guarantee that a touch or an event
+  /// never finds a map that stays frozen.
+  void _resync() {
+    if (_disposed || _pendingToken != null || _presenting || !_pacer.idle) {
+      return;
+    }
+    _pacer.resync();
   }
 
   void _drainFrames() {
@@ -329,22 +365,22 @@ final class MapRenderer implements FrameTargetHost {
     if (result.disposition == RenderResult.rendered) {
       debugRenderedFrames++;
       final frame = result;
+      _presenting = true;
       unawaited(onGpuQueue(() => _present(frame)));
-    } else if (result.disposition == RenderResult.targetNotReady) {
-      // A target that stopped taking frames demands one once it takes them
-      // again; one that takes them but whose session couldn't, such as
-      // before its first surface, has no event to wait for.
-      if (_target.acceptsFrames) {
-        Timer(const Duration(milliseconds: 16), demandFrame);
-      }
     } else {
-      demandFrame();
+      // A result that rendered nothing is paced too: no update, a superseded
+      // demand, a target that isn't ready, or a failed session, which backs
+      // off and can't spin.
+      _pacer.frameSkipped();
     }
   }
 
   /// A gesture changed the camera: its frame shouldn't wait for the pacing
   /// delay of an animation's frames.
-  void expediteFrame() => _pacer.expedite();
+  void expediteFrame() {
+    _pacer.expedite();
+    _resync();
+  }
 
   /// Hands the latest frame to Flutter through the target, then has the
   /// [FramePacer] demand the next one: at once while a refresh passed since
@@ -356,6 +392,7 @@ final class MapRenderer implements FrameTargetHost {
     } on Object catch (error) {
       debugPrint('maplibre_native: present failed: $error');
     } finally {
+      _presenting = false;
       if (!_disposed) _pacer.frameEnded();
     }
   }
@@ -367,6 +404,7 @@ final class MapRenderer implements FrameTargetHost {
   }
 
   void _onEvents(List<RuntimeEvent> events) {
+    _resync();
     final onEvent = this.onEvent;
     if (_disposed || onEvent == null) return;
     events.forEach(onEvent);

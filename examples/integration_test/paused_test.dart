@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
+import 'shared/engine_state.dart';
 import 'shared/test_map.dart';
 
 void main() {
@@ -27,6 +28,41 @@ void runTests() {
       );
       expect(map.controller.isRenderingPaused, paused);
     }
+
+    testWidgets('pausing during a flight never freezes the map', (
+      tester,
+    ) async {
+      final map = await pumpMap(tester);
+      var flying = true;
+      final flight = () async {
+        for (var leg = 1; flying; leg++) {
+          await map.controller.animateCamera(
+            CameraUpdate.position(zoom: leg.isOdd ? 6 : 3),
+            animation: const CameraAnimation.fly(
+              duration: Duration(milliseconds: 400),
+            ),
+          );
+        }
+      }();
+      // Pauses land while the pacer waits for a refresh and while it delays.
+      for (var i = 0; i < 12; i++) {
+        await setPaused(map, paused: true);
+        await tester.pump(Duration(milliseconds: i.isEven ? 2 : 11));
+        await setPaused(map, paused: false);
+        await tester.pump(Duration(milliseconds: i.isEven ? 7 : 3));
+      }
+      flying = false;
+      await map.pumpFuture(flight, reason: 'the flight ending');
+      if (!kIsWeb) {
+        final rendered = engineRenderedFrames()!;
+        await map.pumpFuture(
+          map.controller.moveCamera(const CameraUpdate.position(zoom: 9)),
+          reason: 'moving the camera after the pauses',
+        );
+        await map.waitForFrame((camera) => (camera.zoom - 9).abs() < 1e-6);
+        expect(engineRenderedFrames(), greaterThan(rendered));
+      }
+    });
 
     testWidgets('keeps the camera and shows changes on resume', (tester) async {
       final map = await pumpMap(tester);

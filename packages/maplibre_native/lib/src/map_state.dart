@@ -1083,6 +1083,7 @@ class _NativeGestureCamera implements GestureCameraSink {
     Offset around, {
     Duration duration = Duration.zero,
   }) {
+    _state._renderer?.expediteFrame();
     _state
       .._cancelAnimation()
       .._nextChangeReason = CameraChangeReason.gesture

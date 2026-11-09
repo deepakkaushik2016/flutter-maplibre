@@ -74,6 +74,14 @@ void runTests() {
         // Each demand waits for a display refresh, or a Flutter frame's
         // stand-in. Unpaced, iOS and Android render hundreds a second.
         expect(count, greaterThan(10));
+        if (policy == LiveTestWidgetsFlutterBindingFramePolicy.fullyLive) {
+          // A pacer limping along would pass the upper bound alone.
+          expect(
+            count,
+            greaterThanOrEqualTo(0.7 * refreshRate * elapsed),
+            reason: 'Only $count frames in $elapsed s at $refreshRate Hz',
+          );
+        }
         expect(
           count,
           lessThanOrEqualTo(refreshRate * elapsed + 2),
