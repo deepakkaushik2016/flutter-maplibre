@@ -250,7 +250,14 @@ Each entry: the decision, then why.
   demand goes out half a refresh after the last refresh, not at the refresh:
   demanded at the refresh, 3D frames on an iPhone 15 Plus missed the next
   vsync about 10 % of the time (p95 16.8 to 33.3 ms). A gesture's frame skips
-  that delay (`expedite`), so a drag keeps the next-refresh latency. The pacer lives in the plugin, not in the C library's
+  that delay (`expedite`). Phases ¼ and ⅓ were tried over Liberty + Mapterhorn
+  on the phone, 3 runs each, and gave no p95 back and fewer frames than ½.
+  Liberty's p95 of 33.3 ms, up from 16.8, and about 8 % fewer frames are the
+  accepted cost: the heaviest scene gives that up so that no map renders
+  frames nobody sees. Nothing depends on a demand having armed or on a result
+  having rendered: a demand that can't arm retries, every result goes through
+  the pacer, and a gesture or event re-demands when nothing is under way. The
+  pacer lives in the plugin, not in the C library's
   `mln_*_frame_pacer`: that one demands at the next display refresh after an
   update and has no way to catch up after a long frame, and it would replace
   the token-and-`waitForUpdate` demand loop that tells this plugin which
