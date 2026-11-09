@@ -105,6 +105,12 @@ void runTests() {
     }
 
     testWidgets('the camera follows 60 fixes on the ground', (tester) async {
+      // The renderer's own frame clock, as in an app: the move bound below
+      // relates camera events to frames rendered at the display's rate.
+      final binding = IntegrationTestWidgetsFlutterBinding.instance;
+      final policy = binding.framePolicy;
+      binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+      addTearDown(() => binding.framePolicy = policy);
       final track = _track(60);
       final frameTimesMs = <double>[];
       var frames = 0;
