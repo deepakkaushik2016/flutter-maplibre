@@ -34,7 +34,7 @@ final class _Simulation {
   double _now = 0;
   double? _frameEnd;
   double? _delayEnd;
-  void Function()? _tick;
+  RefreshCallback? _tick;
   void Function()? _delayed;
 
   void fly(double durationMs) {
@@ -121,7 +121,7 @@ void main() {
     });
 
     test('at rest it stops asking for refreshes and renders nothing', () {
-      final ticks = <void Function()>[];
+      final ticks = <RefreshCallback>[];
       var demands = 0;
       var time = Duration.zero;
       final pacer = FramePacer(
@@ -145,7 +145,7 @@ void main() {
     });
 
     group('a gesture', () {
-      late List<void Function()> ticks;
+      late List<RefreshCallback> ticks;
       late List<void Function()> delays;
       late int demands;
       late Duration time;
@@ -196,8 +196,27 @@ void main() {
       });
     });
 
+    test('a refresh without a display frame demands without a delay', () {
+      final ticks = <RefreshCallback>[];
+      final delays = <void Function()>[];
+      var demands = 0;
+      var time = const Duration(seconds: 1);
+      final pacer = FramePacer(
+        schedule: ticks.add,
+        demand: () => demands++,
+        now: () => time,
+        delay: (_, callback) => delays.add(callback),
+      )..frameEnded();
+      time += const Duration(milliseconds: 4);
+      pacer.frameEnded();
+      time += const Duration(milliseconds: 16);
+      ticks.removeAt(0)(fromDisplay: false);
+      expect(demands, 2);
+      expect(delays, isEmpty);
+    });
+
     test('a refresh that a frame waited for demands it', () {
-      final ticks = <void Function()>[];
+      final ticks = <RefreshCallback>[];
       var demands = 0;
       final pacer = FramePacer(
         schedule: ticks.add,

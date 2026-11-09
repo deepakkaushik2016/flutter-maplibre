@@ -2,8 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 
+/// Called at a refresh. [fromDisplay] is false for a stand-in that no display
+/// frame timed.
+typedef RefreshCallback = void Function({bool fromDisplay});
+
 /// Asks for one call of the given function at the display's next refresh.
-typedef ScheduleRefresh = void Function(VoidCallback onRefresh);
+typedef ScheduleRefresh = void Function(RefreshCallback onRefresh);
 
 /// Runs a function after a duration.
 typedef Delay = void Function(Duration duration, VoidCallback callback);
@@ -132,17 +136,20 @@ final class FramePacer {
     demand();
   }
 
-  void _onRefresh() {
+  void _onRefresh({bool fromDisplay = true}) {
     _scheduled = false;
     final time = now();
-    final last = _lastRefresh;
-    _lastRefresh = time;
-    if (last != null) {
-      // Not every refresh is asked for, so a longer gap says nothing about
-      // the display. The estimate moves slowly past a Flutter frame's jitter.
-      final sample = time - last;
-      if (sample >= _interval * 0.4 && sample <= _interval * 1.5) {
-        _interval = _interval * 0.9 + sample * 0.1;
+    if (fromDisplay) {
+      final last = _lastRefresh;
+      _lastRefresh = time;
+      if (last != null) {
+        // Not every refresh is asked for, so a longer gap says nothing about
+        // the display. The estimate moves slowly past a Flutter frame's
+        // jitter.
+        final sample = time - last;
+        if (sample >= _interval * 0.4 && sample <= _interval * 1.5) {
+          _interval = _interval * 0.9 + sample * 0.1;
+        }
       }
     }
     // Consecutive refreshes are what tell the display's rate, so keep asking
@@ -151,7 +158,8 @@ final class FramePacer {
     if (lastDemand != null && time - lastDemand < _interval * 2) {
       _askForRefresh();
     }
-    if (_waiting && _expedited) {
+    if (_waiting && (_expedited || !fromDisplay)) {
+      // Without a display frame there is no refresh to keep a place ahead of.
       _demandNext();
     } else if (_waiting) {
       _waiting = false;
@@ -168,30 +176,32 @@ final class FramePacer {
 ///
 /// A Flutter frame need not come while the app draws none, as under a
 /// `flutter_test` frame policy without a pump or in the background, or at
-/// all while frames are disabled, so a timer stands in after two refreshes
-/// at 60 Hz.
+/// all while frames are disabled, so a timer stands in after 20 ms.
 final class FlutterFrameClock {
   int? _callbackId;
   Timer? _fallback;
   Timer? _delay;
 
   /// See [FlutterFrameClock].
-  void schedule(VoidCallback onRefresh) {
+  void schedule(RefreshCallback onRefresh) {
     assert(_callbackId == null, 'one refresh at a time');
-    void fire() {
+    void fire({required bool fromDisplay}) {
       final callbackId = _callbackId;
       if (callbackId == null) return;
       SchedulerBinding.instance.cancelFrameCallbackWithId(callbackId);
       _callbackId = null;
       _fallback?.cancel();
       _fallback = null;
-      onRefresh();
+      onRefresh(fromDisplay: fromDisplay);
     }
 
     _callbackId = SchedulerBinding.instance.scheduleFrameCallback(
-      (_) => fire(),
+      (_) => fire(fromDisplay: true),
     );
-    _fallback = Timer(const Duration(milliseconds: 34), fire);
+    _fallback = Timer(
+      const Duration(milliseconds: 20),
+      () => fire(fromDisplay: false),
+    );
   }
 
   /// See [Delay].
