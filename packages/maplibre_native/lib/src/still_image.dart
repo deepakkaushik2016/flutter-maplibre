@@ -97,6 +97,8 @@ final class StillImageRendererNative implements StillImageRenderer {
     request.check();
     // A static map doesn't follow the ground by default: over high ground
     // its camera would be under the terrain and draw only the background.
+    // On exactly when the caller gives no center height, with a terrain or
+    // not: without one there is no ground to reach, so it does nothing.
     await map.setTerrainOptions(
       mln.MapTerrainOptions(centerClampedToGround: centerAltitude == null),
     );

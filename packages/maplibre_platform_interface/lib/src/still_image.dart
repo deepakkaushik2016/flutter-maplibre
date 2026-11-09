@@ -43,11 +43,12 @@ abstract interface class StillImageRenderer {
   /// Renders [style] at [camera] and returns a PNG of [size] logical pixels
   /// times [pixelRatio]. Requests may overlap.
   ///
-  /// With a [terrain], whose source must be in [style], the camera's center
-  /// moves onto the ground, as on a map with
-  /// [MapOptions.centerClampedToGround], which takes at least one more
-  /// render. Give [centerAltitude], in meters above sea level, to place the
-  /// center yourself instead.
+  /// [terrain]'s source must be in [style]. Unless you give [centerAltitude],
+  /// in meters above sea level, the camera's center moves onto the ground, as
+  /// on a map with [MapOptions.centerClampedToGround], whether or not there
+  /// is a [terrain]: with one, which takes at least one more render; without
+  /// one, the ground is flat and it does nothing. A given [centerAltitude]
+  /// turns this off and places the center there, with a [terrain] or not.
   ///
   /// Throws a [StillImageException] when the image can't be drawn, a
   /// [TimeoutException] when it isn't done within [timeout], and an

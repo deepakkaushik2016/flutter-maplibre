@@ -156,11 +156,13 @@ final png = await renderer.render(
 renderer.dispose();
 ```
 
-With a `terrain`, whose source must be in the style, the center of the camera
-moves onto the ground, as on a map with `centerClampedToGround`, which takes at
-least one more render. Without that, an image over high ground would have its
-camera under the terrain and show only the style's background. Pass
-`centerAltitude`, in meters above sea level, to place the center yourself.
+Unless you pass `centerAltitude`, the center of the camera moves onto the
+ground, as on a map with `centerClampedToGround`, whether or not there is a
+`terrain`: with a `terrain`, whose source must be in the style, that takes at
+least one more render; without one, the ground is flat and it does nothing.
+Without the clamp, an image over high ground would have its camera under the
+terrain and show only the style's background. A `centerAltitude`, in meters
+above sea level, turns it off and places the center there.
 
 An image that can't be drawn fails with a `StillImageException`: a style, sprite
 or glyph range it needs is missing, or the renderer was disposed. One that takes
