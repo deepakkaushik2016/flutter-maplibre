@@ -6,7 +6,7 @@
 //     --target integration_test/terrain_soak_test.dart -d <device>
 //
 // The RSS series and frame times land in build/integration_response_data.json.
-// --dart-define=TERRAIN_SOAK_MINUTES=<n> (3 or more) shortens the soak, for
+// --dart-define=TERRAIN_SOAK_MINUTES=<n> (6 or more) shortens the soak, for
 // checking that the test itself fails on a leak or a hitch.
 import 'dart:async';
 import 'dart:convert';
@@ -31,11 +31,22 @@ const _toggleEvery = Duration(seconds: 30);
 const _exaggerations = [0.5, 1.0, 1.5, 2.0];
 
 /// The RSS sample that the final one is compared with: after the first
-/// tiles, shaders and caches settled.
-const _baselineMinute = 2;
+/// tiles, shaders and caches settled, and after the GPU allocator's warm-up.
+/// On Vulkan, VMA took one more device-memory block in the fourth minute and
+/// kept it from then on: its block bytes with terrain off stepped from 128 to
+/// 264 MB at 3.1 minutes and stayed there to the end, and RSS stepped by
+/// about 150 MB at the same time. An earlier baseline counts that one-off
+/// step as growth.
+const _baselineMinute = 5;
+
+/// How much RSS may grow over the soak, measured from minute 2: 15 %. The
+/// limit applies the same rate to the shorter span from [_baselineMinute],
+/// so moving the baseline does not allow faster growth.
+const _maxGrowthFromMinute2 = 0.15;
 
 /// How much RSS may grow from the baseline sample to the final one.
-const _maxGrowth = 1.15;
+const double _maxGrowth =
+    1 + _maxGrowthFromMinute2 * (_minutes - _baselineMinute) / (_minutes - 2);
 
 /// Frames before this are not checked: the first tiles, shaders and terrain
 /// toggle.
@@ -163,7 +174,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
       lessThanOrEqualTo(limit),
       reason:
           'RSS grew from ${_mb(baseline)} MB at minute $_baselineMinute '
-          'to ${_mb(rss.last)} MB, more than ${((_maxGrowth - 1) * 100).round()} %: '
+          'to ${_mb(rss.last)} MB, more than ${((_maxGrowth - 1) * 100).toStringAsFixed(1)} %: '
           '${report['rss_mb']}',
     );
     for (final (name, frames, stats) in [
