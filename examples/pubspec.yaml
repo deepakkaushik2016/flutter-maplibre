@@ -29,7 +29,7 @@ dev_dependencies:
   maplibre_native_ffi:
     git:
       url: https://github.com/deepakkaushik2016/maplibre-native-ffi
-      ref: terrain-3d-202611.5
+      ref: terrain-3d-202611.6
       path: bindings/dart
   very_good_analysis: ^10.0.0
 
