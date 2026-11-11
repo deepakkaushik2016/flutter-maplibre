@@ -1,0 +1,9 @@
+{
+  "name": "style-gallery-tools",
+  "private": true,
+  "description": "Web references for the style gallery",
+  "dependencies": {
+    "maplibre-gl": "6.16.0",
+    "playwright": "1.56.1"
+  }
+}

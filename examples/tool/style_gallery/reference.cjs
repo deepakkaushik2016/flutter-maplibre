@@ -6,7 +6,7 @@
 //
 //   GALLERY_NATIVE_DIR  where the test wrote them (default: the temp dir of
 //                       the sandboxed macOS example app)
-//   GLJS_DIR            the maplibre-gl 6.16.0 package (default: next to playwright)
+//   GLJS_DIR            the maplibre-gl 6.16.0 package (default: node_modules of this folder)
 //   PLAYWRIGHT_MODULE   path of the playwright node module
 //   PLAYWRIGHT_BROWSERS_PATH  where the browsers are
 //   GALLERY_ONLY        render only the names that contain this text
@@ -14,7 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// maplibre-gl-js 6.16.0, from the node_modules next to playwright (or
+// maplibre-gl-js 6.16.0, from the node_modules of this folder (or
 // GLJS_DIR).
 const GLJS = '6.16.0';
 const nativeDir =
@@ -24,10 +24,9 @@ const nativeDir =
     'Library/Containers/com.github.josxha.maplibreExample/Data/tmp/gallery',
   );
 const playwrightPath =
-  process.env.PLAYWRIGHT_MODULE ||
-  path.resolve(__dirname, '../../../../../.tools/gljs-harness/node_modules/playwright');
+  process.env.PLAYWRIGHT_MODULE || path.join(__dirname, 'node_modules/playwright');
 const gljsDir =
-  process.env.GLJS_DIR || path.join(path.dirname(playwrightPath), 'maplibre-gl');
+  process.env.GLJS_DIR || path.join(__dirname, 'node_modules/maplibre-gl');
 const outDir = path.resolve(__dirname, '../../build/style_gallery/web');
 
 const { chromium } = require(playwrightPath);

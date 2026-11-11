@@ -26,11 +26,14 @@ SOURCE = os.environ.get(
 
 
 def collect_native():
+    """Copies the native renders that manifest.json lists, and only those."""
     dest = os.path.join(OUT, "native")
     os.makedirs(dest, exist_ok=True)
-    for name in os.listdir(SOURCE):
-        if name.endswith(".png"):
-            shutil.copy2(os.path.join(SOURCE, name), os.path.join(dest, name))
+    with open(os.path.join(SOURCE, "manifest.json")) as f:
+        manifest = json.load(f)
+    for entry in manifest:
+        name = entry["name"] + ".png"
+        shutil.copy2(os.path.join(SOURCE, name), os.path.join(dest, name))
     shutil.copy2(os.path.join(SOURCE, "manifest.json"), os.path.join(OUT, "manifest.json"))
 
 
