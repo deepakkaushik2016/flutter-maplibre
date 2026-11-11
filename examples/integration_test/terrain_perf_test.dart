@@ -16,6 +16,10 @@
 // --dart-define=TERRAIN_PERF_USER_LOCATION=true also shows a
 // UserLocationLayer that stays in view, with its accuracy and a heading
 // that turns, updated 30 times a second: the worst case of a compass.
+// --dart-define=TERRAIN_PERF_SKY=on adds a sky to the style and also flies
+// at pitch 30, where its horizon is off screen; =off flies at pitch 30
+// without one. Compare the two runs' pitch_30 frames: the sky must cost
+// nothing when no horizon is in view. Informational, not part of the gate.
 import 'dart:async';
 import 'dart:convert';
 
@@ -41,6 +45,20 @@ const _basemap = String.fromEnvironment('TERRAIN_PERF_BASEMAP');
 const _mapterhorn = 'https://tiles.mapterhorn.com/tilejson.json';
 
 const _userLocation = bool.fromEnvironment('TERRAIN_PERF_USER_LOCATION');
+
+/// `on` or `off`: fly at pitch 30 too, with or without [_sky]. Empty: neither.
+const _skyVariant = String.fromEnvironment('TERRAIN_PERF_SKY');
+
+/// The sky of the True Earth outdoor style.
+const Map<String, Object> _sky = {
+  'sky-color': '#3E7CC0',
+  'horizon-color': '#DCE7EF',
+  'fog-color': '#C6D4E0',
+  'sky-horizon-blend': 0.85,
+  'horizon-fog-blend': 0.75,
+  'fog-ground-blend': 0.35,
+  'atmosphere-blend': 0.9,
+};
 
 /// A location just ahead of the camera's center, so it stays in view
 /// during the flights, turning 3° every 33 ms.
@@ -154,7 +172,10 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
         tester,
         options: MapOptions(
           style: MapStyle.json(
-            jsonEncode(basemap != null ? style : trailStyle(style)),
+            jsonEncode({
+              ...(basemap != null ? style : trailStyle(style)),
+              if (_skyVariant == 'on') 'sky': _sky,
+            }),
           ),
           initCamera: alpsCamera,
         ),
@@ -186,6 +207,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
             : 'fixture',
         'basemap': basemap != null ? _basemap : 'none',
         'user_location': _userLocation,
+        'sky': _skyVariant.isEmpty ? 'none' : _skyVariant,
       };
       // What the map got wrong, and the numbers that missed the gate.
       final failures = <String>[];
@@ -194,7 +216,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
         if (value > limit) missed.add('$name: $value ms > $limit ms');
       }
 
-      for (final pitch in [50.0, 60.0]) {
+      for (final pitch in [if (_skyVariant.isNotEmpty) 30.0, 50.0, 60.0]) {
         final stop = Completer<void>();
         final flight = flyOverRidge(
           map.controller,
@@ -223,6 +245,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
           greaterThan(_flight.inSeconds),
           reason: 'the map showed new frames during the flight at $pitch',
         );
+        if (pitch < 50) continue;
         gate('pitch $pitch median', mapFrames.median, _medianMs);
         gate('pitch $pitch p95', mapFrames.p95, _p95Ms);
         gate('pitch $pitch worst', mapFrames.max, _worstMs);
