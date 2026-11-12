@@ -36,6 +36,29 @@ By default the camera's center follows the ground, so a pitched camera stays
 above it; `MapOptions(centerClampedToGround: false)` keeps it at sea level.
 On native, drags and pinches keep the ground they grab under the fingers.
 
+## Sky and fog
+
+A sky colors what is above the horizon, and its fog fades the distant
+ground into it. Set it on the style, or give the style document a `sky`:
+
+```dart
+await style.setSky(
+  const Sky(
+    skyColor: Color(0xFF3E7CC0),
+    horizonColor: Color(0xFFDCE7EF),
+    fogColor: Color(0xFFC6D4E0),
+    fogGroundBlend: 0.35,
+  ),
+);
+```
+
+Members left out take their style spec defaults, and `setSky(null)`
+removes the sky. `fogGroundBlend: 1` turns the fog off. The horizon is on
+screen only at a steep pitch, about 70° and more, so raise
+`MapOptions.maxPitch` (up to 85) to see the sky. `atmosphereBlend` applies
+only on web, with the globe projection. Loading a new style replaces the
+sky with that style's.
+
 ## Height of the ground
 
 `MapController.queryTerrainElevation` reads the height of the terrain at a

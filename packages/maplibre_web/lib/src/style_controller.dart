@@ -419,7 +419,7 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
   }
 
   /// Throws once a newer style replaced this one, whether or not a style
-  /// loads: a replaced style takes no terrain.
+  /// loads: a replaced style takes no terrain or sky.
   void _checkCurrent() {
     if (_disposed) {
       throw StateError('The style was replaced; use the current style.');
@@ -435,6 +435,14 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
       exaggeration:
           terrain.getProperty<JSNumber?>('exaggeration'.toJS)?.toDartDouble ??
           1,
+    );
+  }
+
+  @override
+  Future<void> setSky(Sky? sky) async {
+    _checkCurrent();
+    _throwErrorEvents(
+      () => sky == null ? _map.setSky() : _map.setSky(sky.toJson().jsify()),
     );
   }
 

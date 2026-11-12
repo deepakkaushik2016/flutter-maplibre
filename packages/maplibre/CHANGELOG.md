@@ -11,9 +11,9 @@
   `toScreenLocationOnTerrain`, `setTerrainLoadMode` and
   `queryTerrainElevation`. A class that implements `MapController`, such as
   a hand-written fake in an app's tests, must implement them.
-- `StyleController` has three new abstract members: `setTerrain`,
-  `terrain` and `setGlobalState`. A class that extends or implements it
-  must implement them.
+- `StyleController` has four new abstract members: `setTerrain`,
+  `terrain`, `setSky` and `setGlobalState`. A class that extends or
+  implements it must implement them.
 - `MapGestureDetector` now also sets `GestureCameraUpdate.around` on steps
   that only pan, to the point the finger moved to, so a platform can keep
   the ground under the finger. A `GestureCameraSink` that took a non-null
@@ -75,6 +75,10 @@
   maplibre-gl-js drew a 204 tile two or more zooms past the data from a z5
   tile. An empty tile is asked for once a session (or until its
   `Cache-Control` or `Expires` lapses), on web and native.
+- `StyleController.setSky(Sky(…))` sets the sky above the horizon and the
+  fog that fades the distant ground into it, and `setSky(null)` removes it,
+  on web and native. Native maps and still images now pitch past 60, up to
+  85, so a steep camera shows the sky.
 
 ### Performance
 

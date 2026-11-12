@@ -60,14 +60,12 @@ class MapOptions {
   /// The maximum zoom level. Allowed values are 0-24. Defaults to 22.
   final double maxZoom;
 
-  /// The minimum camera pitch / tilt. Allowed values on web are 0-85. Allowed
-  /// values on other platforms are 0-60, bigger values will get ignored.
+  /// The minimum camera pitch / tilt. Allowed values are 0-85.
   ///
   /// Defaults to 0.
   final double minPitch;
 
-  /// The maximum camera pitch / tilt. Allowed values on web are 0-85. Allowed
-  /// values on other platforms are 0-60, bigger values will get ignored.
+  /// The maximum camera pitch / tilt. Allowed values are 0-85.
   final double maxPitch;
 
   /// The maximum bounding box of the map camera. No constraints are in place

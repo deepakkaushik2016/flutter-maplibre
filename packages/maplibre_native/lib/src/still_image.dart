@@ -82,6 +82,9 @@ final class StillImageRendererNative implements StillImageRenderer {
     }
   }
 
+  /// The steepest pitch of an image, as of a map's [MapOptions.maxPitch].
+  static const _maxPitch = 85.0;
+
   Future<Uint8List> _draw(
     _Request request, {
     required MapStyle style,
@@ -94,6 +97,9 @@ final class StillImageRendererNative implements StillImageRenderer {
       mln.MapOptions(initialExtent: extent, mapMode: mln.MapMode.static),
     );
     await map.ready;
+    request.check();
+    // Above the default of 60, so a steep camera shows the horizon and sky.
+    await map.setBounds(const mln.BoundOptions(maxPitch: _maxPitch));
     request.check();
     // A static map doesn't follow the ground by default: over high ground
     // its camera would be under the terrain and draw only the background.

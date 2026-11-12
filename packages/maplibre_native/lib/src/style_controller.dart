@@ -436,7 +436,7 @@ class StyleControllerNative extends StyleController implements StyleBackend {
   }
 
   /// Throws once a newer style replaced this one, whether or not a style
-  /// loads: a replaced style takes no terrain.
+  /// loads: a replaced style takes no terrain or sky.
   void _checkCurrent() {
     if (_disposed) {
       throw StateError('The style was replaced; use the current style.');
@@ -445,6 +445,12 @@ class StyleControllerNative extends StyleController implements StyleBackend {
 
   @override
   Terrain? get terrain => _terrain;
+
+  @override
+  Future<void> setSky(Sky? sky) async {
+    _checkCurrent();
+    await _map.setStyleSkyJson(sky?.toJson());
+  }
 
   @override
   Future<void> setGlobalState(String key, Object? value) async {

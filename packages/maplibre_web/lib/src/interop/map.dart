@@ -145,6 +145,12 @@ extension type JsMap._(Camera _) implements Camera {
   /// The 3D terrain of the map, or null.
   external JsTerrain? get terrain;
 
+  /// Sets the sky, a sky specification, or removes it when [sky] is left
+  /// out. Rejects null.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#setsky
+  external void setSky([JSAny? sky]);
+
   /// Sets the global state property [name] that `global-state` expressions
   /// read.
   ///

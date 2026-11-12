@@ -14,6 +14,7 @@ import 'network_test.dart' as network;
 import 'offline_test.dart' as offline;
 import 'paused_test.dart' as paused;
 import 'projection_test.dart' as projection;
+import 'sky_test.dart' as sky;
 import 'still_image_test.dart' as still_image;
 import 'style_test.dart' as style;
 import 'terrain_gestures_test.dart' as terrain_gestures;
@@ -33,6 +34,7 @@ void main() {
   style.runTests();
   terrain.runTests();
   terrain_gestures.runTests();
+  sky.runTests();
   features.runTests();
   mlt.runTests();
   network.runTests();

@@ -20,6 +20,7 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
     of its ground.
   - `lib/src/style/deferred_terrain.dart`: holds a terrain set while a style
     loads, for both platforms.
+  - `lib/src/style/sky.dart`: the `Sky` of a style, its sky and fog.
 - `packages/maplibre_web`: browser, via maplibre-gl-js.
 - `packages/maplibre_geolocator`: optional adapter from `geolocator` positions
   to the `UserLocationLayer` of `maplibre`.
@@ -68,6 +69,7 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   for review, not in `all_test.dart`; `examples/tool/style_gallery/` adds the
   gl-js references and the side-by-side report (see its README).
   `follow_camera_test.dart` replays GPS fixes over the terrain.
+  `sky_test.dart` reads the sky at the top of a steep view over it.
   `user_location_test.dart` reads the frame's pixels back to find what
   the map drew: Flutter's layer on native, the gl-js canvas on web
   (`shared/browser.dart`). `lib/utils/simulated_locations.dart` walks a simulated

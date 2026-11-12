@@ -285,6 +285,15 @@ abstract class StyleController {
   /// The 3D terrain of the style, or null if it has none.
   Terrain? get terrain;
 
+  /// Sets the [sky] of the style, or removes it when [sky] is null.
+  ///
+  /// The new sky replaces the style's sky whole, and loading a new style
+  /// replaces it with the one of that style. [Sky.atmosphereBlend] applies
+  /// only on web, with [MapProjection.globe].
+  ///
+  /// Fails with a [StateError] once a newer style replaced this one.
+  Future<void> setSky(Sky? sky);
+
   /// Sets the global state property [key] of the style to [value], which
   /// `global-state` expressions of the style read.
   ///

@@ -43,6 +43,9 @@ abstract interface class StillImageRenderer {
   /// Renders [style] at [camera] and returns a PNG of [size] logical pixels
   /// times [pixelRatio]. Requests may overlap.
   ///
+  /// [camera] may pitch up to 85 degrees, as a map whose
+  /// [MapOptions.maxPitch] is 85.
+  ///
   /// [terrain]'s source must be in [style]. Unless you give [centerAltitude],
   /// in meters above sea level, the camera's center moves onto the ground, as
   /// on a map with [MapOptions.centerClampedToGround], whether or not there

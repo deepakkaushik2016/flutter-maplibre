@@ -629,6 +629,15 @@ Each entry: the decision, then why.
   is asynchronous and `StyleController.terrain` is not, so the controller
   takes it from the loaded style JSON it already reads on load and from each
   `setTerrain`; reading it costs no call. Web reads `map.getTerrain()`.
+- **`StyleController.setSky` replaces the sky whole and has no getter.**
+  `Sky.toJson()` writes every member, so a set sky never keeps members of the
+  one before, as both `mln_map_set_style_sky_json` and gl-js `setSky` would
+  for members a partial object leaves out. Native passes JSON null to remove
+  the sky; gl-js rejects null and removes it when the argument is left out.
+  A sky set while a new style loads is not deferred as a terrain is: the new
+  style brings its own sky, and a replaced controller rejects the call with
+  a `StateError`. Neither platform reads the sky back yet; the C getter is
+  asynchronous and no caller needs it.
 - **On web, raster-dem tiles load through the `sparse-dem` protocol
   (`maplibre_web/lib/src/sparse_dem.dart`), which answers an empty tile
   (204, or an empty body) with a 404.** A sparse terrain tileset answers the
@@ -664,7 +673,9 @@ Each entry: the decision, then why.
   static map has its own camera clamp setting, which is off by default, so a
   still over high ground would put the camera under the terrain and draw only
   the background. The renderer turns the clamp on unless the caller gives
-  `centerAltitude`; on maps without terrain the clamp does nothing. Style
+  `centerAltitude`; on maps without terrain the clamp does nothing. It also
+  raises the static map's max pitch from the default of 60 to 85, the
+  highest `MapOptions.maxPitch`, so a steep camera shows the sky. Style
   commands complete only once the document parsed, so the renderer awaits them
   instead of following map events. `timeout` and `dispose` end a request at
   once with their own error and release its session and map, which cancels a
