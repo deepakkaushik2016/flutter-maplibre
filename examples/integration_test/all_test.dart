@@ -18,6 +18,7 @@ import 'sky_test.dart' as sky;
 import 'still_image_test.dart' as still_image;
 import 'style_test.dart' as style;
 import 'terrain_gestures_test.dart' as terrain_gestures;
+import 'terrain_query_test.dart' as terrain_query;
 import 'terrain_test.dart' as terrain;
 import 'ui_test.dart' as ui;
 import 'unsupported_test.dart' as unsupported;
@@ -34,6 +35,7 @@ void main() {
   style.runTests();
   terrain.runTests();
   terrain_gestures.runTests();
+  terrain_query.runTests();
   sky.runTests();
   features.runTests();
   mlt.runTests();

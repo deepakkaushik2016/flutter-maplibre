@@ -7,10 +7,11 @@
   `hooks.user_defines.maplibre_native_ffi.release_url` in its root
   `pubspec.yaml`. See
   [Installation](https://josxha.github.io/flutter-maplibre/docs/getting-started/setup/).
-- `MapController` has four new members: `toLngLatOnTerrain`,
-  `toScreenLocationOnTerrain`, `setTerrainLoadMode` and
-  `queryTerrainElevation`. A class that implements `MapController`, such as
-  a hand-written fake in an app's tests, must implement them.
+- `MapController` has five new members: `toLngLatOnTerrain`,
+  `toScreenLocationOnTerrain`, `toScreenLocationsOnTerrain`,
+  `setTerrainLoadMode` and `queryTerrainElevation`. A class that
+  implements `MapController`, such as a hand-written fake in an app's
+  tests, must implement them.
 - `StyleController` has four new abstract members: `setTerrain`,
   `terrain`, `setSky` and `setGlobalState`. A class that extends or
   implements it must implement them.
@@ -69,6 +70,11 @@
   `MapController.toScreenLocationOnTerrain` convert between screen points
   and the ground that the terrain draws, and tell whether nearer ground
   hides a point, on web and native.
+- 3D terrain: `MapController.toScreenLocationsOnTerrain` finds where the
+  map draws a list of points on the ground, such as a trail, in one call:
+  one answer for each point, in order, null where
+  `toScreenLocationOnTerrain` is null, all from the same frame. Not on web
+  it is one query for the whole list, much faster than a call for each.
 - 3D terrain over a sparse raster-dem tileset, one that answers the tiles it
   does not have with `204 No Content` or a 404: such a tile is drawn and
   queried from its nearest ancestor with data, on web as on native.

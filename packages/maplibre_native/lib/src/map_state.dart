@@ -902,11 +902,22 @@ class MapLibreMapStateNative extends MapLibreMapState {
     final drawn = await _queryFrame(
       (renderer) => renderer.queryPixelForLatLng(lngLat.toMln()),
     );
-    if (drawn == null) return null;
-    return TerrainScreenLocation(
-      offset: drawn.point.toOffset(),
-      occluded: drawn.occluded,
+    return drawn?.toTerrainScreenLocation();
+  }
+
+  @override
+  Future<List<TerrainScreenLocation?>> toScreenLocationsOnTerrain(
+    List<Geographic> lngLats,
+  ) async {
+    if (lngLats.isEmpty) return const [];
+    // One query of one frame for every point, rather than one for each.
+    final drawn = await _queryFrame(
+      (renderer) => renderer.queryPixelsForLatLngs([
+        for (final lngLat in lngLats) lngLat.toMln(),
+      ]),
     );
+    if (drawn == null) return List.filled(lngLats.length, null);
+    return [for (final result in drawn) result.toTerrainScreenLocation()];
   }
 
   /// Runs [query] on the session's latest frame, or answers null without a

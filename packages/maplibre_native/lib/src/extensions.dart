@@ -250,6 +250,21 @@ extension MlnScreenPointExt on mln.ScreenPoint {
   Offset toOffset() => Offset(x, y);
 }
 
+/// Extension methods for the [mln.TerrainScreenPoint] class.
+extension MlnTerrainScreenPointExt on mln.TerrainScreenPoint {
+  /// This point of the ground as a [TerrainScreenLocation].
+  TerrainScreenLocation toTerrainScreenLocation() =>
+      TerrainScreenLocation(offset: point.toOffset(), occluded: occluded);
+}
+
+/// Extension methods for the [mln.TerrainScreenPointResult] class.
+extension MlnTerrainScreenPointResultExt on mln.TerrainScreenPointResult {
+  /// This answer for one point as a [TerrainScreenLocation], or null where
+  /// the map draws no ground at the point.
+  TerrainScreenLocation? toTerrainScreenLocation() =>
+      found ? pixel.toTerrainScreenLocation() : null;
+}
+
 /// Extension methods for the [mln.EdgeInsets] class.
 extension MlnEdgeInsetsExt on mln.EdgeInsets {
   /// This padding as [EdgeInsets].

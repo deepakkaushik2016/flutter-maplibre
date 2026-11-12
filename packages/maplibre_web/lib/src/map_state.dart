@@ -761,13 +761,16 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     if ((drawn - screenLocation).distance > _terrainPixelTolerance) {
       return null;
     }
-    return await queryTerrainElevation(ground) == null ? null : ground;
+    return _terrainElevation(ground) == null ? null : ground;
   }
 
   @override
   Future<TerrainScreenLocation?> toScreenLocationOnTerrain(
     Geographic lngLat,
-  ) async {
+  ) async => _screenLocationOnTerrain(lngLat);
+
+  /// Where maplibre-gl-js draws [lngLat] on the ground, answered at once.
+  TerrainScreenLocation? _screenLocationOnTerrain(Geographic lngLat) {
     final point = lngLat.toJs();
     // maplibre-gl-js projects from the height that the terrain draws.
     final offset = _map.project(point).toOffset();
@@ -775,21 +778,32 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     if (_map.terrain == null) {
       return TerrainScreenLocation(offset: offset, occluded: false);
     }
-    final height = await queryTerrainElevation(lngLat);
+    final height = _terrainElevation(lngLat);
     if (height == null) return null;
     // A line of sight that comes down onto the ground meets the nearer of
     // two points on it higher up, so ground drawn there higher than the
     // point hides it.
     final shown = _map.unproject(offset.toJs()).toGeographic();
-    final shownHeight = await queryTerrainElevation(shown);
+    final shownHeight = _terrainElevation(shown);
     return TerrainScreenLocation(
       offset: offset,
       occluded: shownHeight != null && shownHeight - height > _occludingMeters,
     );
   }
 
+  /// The points of one frame: maplibre-gl-js answers each at once, so no
+  /// frame comes between them.
   @override
-  Future<double?> queryTerrainElevation(Geographic point) async {
+  Future<List<TerrainScreenLocation?>> toScreenLocationsOnTerrain(
+    List<Geographic> lngLats,
+  ) async => [for (final lngLat in lngLats) _screenLocationOnTerrain(lngLat)];
+
+  @override
+  Future<double?> queryTerrainElevation(Geographic point) async =>
+      _terrainElevation(point);
+
+  /// The height of the terrain at [point], answered at once.
+  double? _terrainElevation(Geographic point) {
     final lngLat = point.toJs();
     final elevation = _map.queryTerrainElevation(lngLat)?.toDouble();
     // maplibre-gl-js also gives 0 where no DEM tile has loaded, so only a 0

@@ -107,6 +107,24 @@ abstract interface class MapController {
   /// calls into maplibre-gl-js on web.
   Future<TerrainScreenLocation?> toScreenLocationOnTerrain(Geographic lngLat);
 
+  /// Finds where the map draws each of [lngLats] on the ground, as
+  /// [toScreenLocationOnTerrain] finds each, such as to place a trail on the
+  /// ground.
+  ///
+  /// The list holds one answer for each point, in the order of [lngLats]:
+  /// null where [toScreenLocationOnTerrain] answers null for the point, such
+  /// as where no loaded DEM tile covers it. An empty list answers an empty
+  /// list. The answers come from the same frame, also while the camera
+  /// moves, as the caveats of [toScreenLocationOnTerrain] describe for each
+  /// platform.
+  ///
+  /// On every platform but web it is one query of the map's latest frame
+  /// for all the points, which is much faster than a call for each. On web
+  /// it makes the calls into maplibre-gl-js that each point needs.
+  Future<List<TerrainScreenLocation?>> toScreenLocationsOnTerrain(
+    List<Geographic> lngLats,
+  );
+
   /// Moves the camera to [update] without an animation.
   ///
   /// It stops a running [animateCamera].

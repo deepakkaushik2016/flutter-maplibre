@@ -107,6 +107,22 @@ gl-js has no occlusion test, so `occluded` compares heights: it can read a
 point hidden by lower ground near the top of a view pitched past about 70°
 as visible.
 
+To place many points on the ground, such as a trail, convert them in one
+call. The list holds one answer for each point, in order, with null where
+`toScreenLocationOnTerrain` would be null, and every answer comes from the
+same frame:
+
+```dart
+final locations = await controller.toScreenLocationsOnTerrain(trail);
+for (final (i, location) in locations.indexed) {
+  if (location == null || location.occluded) continue;
+  // Draw trail[i] at location.offset.
+}
+```
+
+Not on web, the whole list is one query of the map's latest frame, much
+faster than a call for each point.
+
 ## Load mode
 
 On native, `MapController.setTerrainLoadMode` trades the detail of the

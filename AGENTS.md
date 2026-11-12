@@ -71,6 +71,8 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   for review, not in `all_test.dart`; `examples/tool/style_gallery/` adds the
   gl-js references and the side-by-side report (see its README).
   `follow_camera_test.dart` replays GPS fixes over the terrain.
+  `terrain_query_test.dart` compares concurrent and list terrain
+  conversions with the same calls one by one.
   `sky_test.dart` reads the sky at the top of a steep view over it.
   `user_location_test.dart` reads the frame's pixels back to find what
   the map drew: Flutter's layer on native, the gl-js canvas on web

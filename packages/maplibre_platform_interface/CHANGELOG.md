@@ -6,10 +6,11 @@ below. See also the
 
 ### Breaking Changes
 
-- `MapController` has four new members: `toLngLatOnTerrain`,
-  `toScreenLocationOnTerrain`, `setTerrainLoadMode` and
-  `queryTerrainElevation`. A class that implements `MapController`, such as
-  a hand-written fake in an app's tests, must implement them.
+- `MapController` has five new members: `toLngLatOnTerrain`,
+  `toScreenLocationOnTerrain`, `toScreenLocationsOnTerrain`,
+  `setTerrainLoadMode` and `queryTerrainElevation`. A class that
+  implements `MapController`, such as a hand-written fake in an app's
+  tests, must implement them.
 - `StyleController` has three new abstract members: `setTerrain`,
   `terrain` and `setGlobalState`. A class that extends or implements it
   must implement them.

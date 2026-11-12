@@ -902,8 +902,27 @@ Each entry: the decision, then why.
   (`transform.isLocationOccluded`) is internal, so web calls a point hidden
   when the ground drawn at its screen location is more than 2 m higher: a
   line of sight that comes down onto the ground meets the higher of two
-  points on it first. Two to four gl-js calls per conversion. No list
-  variants: the C API answers one point per query.
+  points on it first. Two to four gl-js calls per conversion.
+- **`toScreenLocationsOnTerrain` is one query for a whole list, and
+  concurrent single calls stay independent.** An app placing a trail on the
+  ground (98 points) asked for it after a report that `Future.wait` over
+  `toScreenLocationOnTerrain` answered null for every point on an Android
+  phone. Nothing per call is shared on native: each call is its own C
+  completion, named by its own token in the binding's delivery queue, and
+  its own work item on the session's driver queue, which runs them in
+  order. 100 concurrent calls answered exactly as the same calls one by one
+  on macOS, the iOS simulator, a Pixel 8 Pro (debug and profile), an arm64
+  Android emulator and web (`terrain_query_test.dart`), and on the emulator
+  also while the camera flew; the phone's report did not reproduce. The list call needed a C API addition,
+  `mln_render_session_query_pixels_for_lat_lngs`, which answers every point
+  in one driver work item, so all come from the same frame and the session
+  is validated once; each `mln_terrain_screen_point_result` carries
+  `found`, which maps to null. Concurrent single calls can answer from
+  different frames while the camera moves, because frames render between
+  their work items; the list call cannot. An empty list answers at once
+  without a query. Web answers the points synchronously in one loop, with
+  the single call's two to four gl-js calls each, so no frame comes
+  between them either.
 - **On web, Flutter is the only hit-tester.** The gl-js map is created with
   `interactive: false` and its container has `pointer-events: none`, so the
   browser hands every pointer to Flutter, and widgets over the map no longer

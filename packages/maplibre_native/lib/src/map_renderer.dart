@@ -165,6 +165,13 @@ final class MapRenderer implements FrameTargetHost {
   Future<TerrainScreenPoint?> queryPixelForLatLng(LatLng coordinate) =>
       _session.queryPixelForLatLng(coordinate);
 
+  /// Finds where the session's latest frame draws each of [coordinates] on
+  /// the ground, as [queryPixelForLatLng] does, in one query of one frame.
+  /// Each result's `found` is false where [queryPixelForLatLng] has no value.
+  Future<List<TerrainScreenPointResult>> queryPixelsForLatLngs(
+    List<LatLng> coordinates,
+  ) => _session.queryPixelsForLatLngs(coordinates);
+
   @override
   bool get disposed => _disposed;
 
