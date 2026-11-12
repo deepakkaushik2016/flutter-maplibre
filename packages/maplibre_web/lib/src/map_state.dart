@@ -13,6 +13,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
+import 'package:maplibre_web/src/anchored_pan.dart';
 import 'package:maplibre_web/src/camera_padding_reset.dart';
 import 'package:maplibre_web/src/extensions.dart';
 import 'package:maplibre_web/src/frame_sync.dart';
@@ -959,12 +960,15 @@ class _WebGestureCamera implements GestureCameraSink {
 
   interop.JsMap get _map => _state._map;
 
+  late final AnchoredPan _pan = AnchoredPan(_map);
+
   @override
   void gestureStart() {
     if (!_state._mapCreated) return;
     _state._endAnimation(CameraAnimationResult.cancelled);
     // Catches a fling, whose end then reports the end of its move.
     _map.stop();
+    _pan.reset();
     _state
       .._gestureMoving = true
       .._gestureMoveStarted = false;
@@ -975,14 +979,8 @@ class _WebGestureCamera implements GestureCameraSink {
     if (!_state._mapCreated) return;
     if (update.pans) {
       // Puts the location under the pointer where the pointer is now, which
-      // keeps it under the pointer in every projection.
-      _map.easeTo(
-        interop.EaseToOptions(
-          center: _map.unproject(update.panFrom!.toJs()),
-          offset: (update.panTo! - _mapCenter).toJs(),
-          duration: 0,
-        ),
-      );
+      // keeps it under the pointer in every projection and over terrain.
+      _pan.pan(update.panFrom!, update.panTo!);
     }
     if (update.zoomBy == 0 && update.rotateBy == 0 && update.pitchBy == 0) {
       return;
@@ -1025,21 +1023,14 @@ class _WebGestureCamera implements GestureCameraSink {
     final before = _camera();
     _state._silentCamera = true;
     try {
-      _map
-        ..jumpTo(
-          interop.JumpToOptions(
-            zoom: before.zoom + zoomBy,
-            bearing: before.bearing + rotateBy,
-            pitch: before.pitch + pitchBy,
-          ),
-        )
-        ..easeTo(
-          interop.EaseToOptions(
-            center: location,
-            offset: (around - _mapCenter).toJs(),
-            duration: 0,
-          ),
-        );
+      _map.jumpTo(
+        interop.JumpToOptions(
+          zoom: before.zoom + zoomBy,
+          bearing: before.bearing + rotateBy,
+          pitch: before.pitch + pitchBy,
+        ),
+      );
+      _pan.place(location, around);
       return _camera();
     } finally {
       _map.jumpTo(before.options);
