@@ -1028,13 +1028,13 @@ class _WebGestureCamera implements GestureCameraSink {
         zoom: target.zoom,
         bearing: target.bearing,
         // The offset is on the flat plane; over terrain the ground moves
-        // about the learnt gain times as far, so the ground glides the
+        // about the gain measured now times as far, so the ground glides the
         // fling's distance.
         offset: pan.amount == 0
             ? null
             : (velocity.pan /
                       velocity.pan.distance *
-                      (pan.amount / _pan.gainAlong(velocity.pan)))
+                      (pan.amount / _pan.flingGain(velocity.pan)))
                   .toJs(),
         duration: seconds * 1000,
         easing: _flingCurve.transform.toJS,

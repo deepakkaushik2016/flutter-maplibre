@@ -929,7 +929,8 @@ Each entry: the decision, then why.
   Valley). `AnchoredPan` (anchored_pan.dart) takes the ground under the
   pointer once per gesture and on each move places it: `project` it, pan the
   flat plane by the miss divided by a gain per screen axis, measure again, up
-  to four writes, stopping within 0.5 px. The gains (how far the ground moves
+  to four correcting writes, stopping within 0.5 px, plus one write back to
+  the best camera when the last step made things worse (at most five). The gains (how far the ground moves
   per pixel of flat plane, learnt from each step whose ground moved the same
   way, kept within 0.2–20) are per axis because the ground is foreshortened
   up the screen. A step that ends further away is undone and the next one is
@@ -950,8 +951,11 @@ Each entry: the decision, then why.
   ease-out bezier; max speed and deceleration 1400 px/s and 2500 px/s² for
   pan, 40 and 20 levels for zoom, 360° and 1000° for bearing) in one
   `easeTo`, whose zoom and bearing target comes from the same exact-around
-  step; its offset is divided by the learnt gain along the fling, so the
-  ground glides the fling's distance over terrain.
+  step; its offset is divided by the gain along the fling, measured at the
+  release with one silent 20 px step that is undone (the gains learnt during
+  the drag may be stale by then: the pitch or the terrain changed), so the
+  ground glides the fling's distance over terrain and on a flat map alike.
+  A step that moves nothing writes nothing.
 - **Globe on web needs no forwarding to gl-js handlers.** Measured with
   gl-js 5.24 at 1024×768: the grabbed point stays within 0.1 px at zoom 2 and
   above, also at 80° N and pitched 45°. At zoom 1 a drag from the center to

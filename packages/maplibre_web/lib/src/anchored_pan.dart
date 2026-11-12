@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 import 'package:maplibre_web/src/extensions.dart';
 import 'package:maplibre_web/src/interop/interop.dart' as interop;
@@ -75,16 +77,48 @@ final class AnchoredPan {
   Offset? _lastTo;
   // How far the ground moves on screen along x and along y for each pixel
   // the flat plane moves, as last measured. Kept across gestures, as the
-  // ground in view is alike.
+  // ground in view is alike; a placement corrects a stale one as it goes.
   var _gainX = 1.0;
   var _gainY = 1.0;
 
   /// How far the ground moves on screen, for each pixel the flat plane is
-  /// moved in [direction], as last measured.
+  /// moved in [direction], as last learnt by a placement.
+  @visibleForTesting
   double gainAlong(Offset direction) {
     if (direction.distance == 0) return 1;
     return Offset(direction.dx * _gainX, direction.dy * _gainY).distance /
         direction.distance;
+  }
+
+  /// The length of the step [flingGain] measures with.
+  static const probe = 20.0;
+
+  /// How far the ground under the pointer moves on screen, for each pixel the
+  /// flat plane is moved in [direction], measured now with one silent step
+  /// that is undone. The gains learnt during a drag may be stale by the
+  /// release (the terrain or the pitch changed since), so a fling measures
+  /// afresh. 1 where there is no ground to measure.
+  double flingGain(Offset direction) {
+    if (direction.distance == 0) return 1;
+    final canvas = _map.getCanvas();
+    final probeAt =
+        _lastTo ?? Offset(canvas.clientWidth / 2, canvas.clientHeight / 2);
+    final location = _groundAt(probeAt);
+    if (location == null) return 1;
+    final at = _screenOf(location);
+    if (at == null) return 1;
+    final unit = direction / direction.distance;
+    final center = _map.getCenter();
+    Offset? now;
+    _silently(() {
+      _write(center, unit * probe);
+      now = _screenOf(location);
+      _map.jumpTo(interop.JumpToOptions(center: center));
+    });
+    if (now == null) return 1;
+    final moved = now! - at;
+    final gain = (moved.dx * unit.dx + moved.dy * unit.dy) / probe;
+    return gain.isFinite ? gain.clamp(minGain, maxGain) : 1;
   }
 
   /// Forgets the ground the last gesture held.
@@ -104,6 +138,12 @@ final class AnchoredPan {
   /// Applies one gesture step, and reports the camera it ends at with one
   /// write.
   void apply(GestureCameraUpdate update) {
+    if (!update.pans &&
+        update.zoomBy == 0 &&
+        update.rotateBy == 0 &&
+        update.pitchBy == 0) {
+      return;
+    }
     _silently(() {
       if (update.pans) _pan(update.panFrom!, update.panTo!);
       if (update.zoomBy == 0 && update.rotateBy == 0 && update.pitchBy == 0) {
@@ -247,7 +287,8 @@ final class AnchoredPan {
     return changed;
   }
 
-  // Only called within [apply] and [cameraAround], which make it silent.
+  // Only called within [apply], [cameraAround] and [flingGain], which make
+  // it silent.
   void _write(interop.LngLat center, Offset offset) => _map.easeTo(
     interop.EaseToOptions(center: center, offset: offset.toJs(), duration: 0),
   );

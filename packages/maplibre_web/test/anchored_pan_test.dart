@@ -15,6 +15,9 @@ external void _eval(String source);
 @JS('mockMap')
 external interop.JsMap get _map;
 
+@JS('mockMap.setGain')
+external void _setGain(num kx, num ky);
+
 @JS('writes')
 external JSArray<JSString> get _writes;
 
@@ -44,6 +47,7 @@ void _mock({
     const mid = {x: 200, y: 150};
     const bounds = ${bounds == null ? 'null' : '[${bounds.join(',')}]'};
     let c = {x: 1000, y: 1000}, zoom = 10, bearing = 0, pitch = 50;
+    let KX = $kx, KY = $ky;
     const scale = () => Math.pow(2, zoom - 10);
     const qq = () => $q * pitch / 50;
     const rot = (p, deg) => {
@@ -59,6 +63,8 @@ void _mock({
     const ll = (x, y) => ({lng: x, lat: y});
     const off = (o) => o ? {x: o.x ?? o[0], y: o.y ?? o[1]} : {x: 0, y: 0};
     return {
+      // The terrain changes under the map, as a style or pitch change does.
+      setGain(kx, ky) { KX = kx; KY = ky; },
       getCenter() { return ll(c.x, c.y); },
       getZoom() { return zoom; },
       getBearing() { return bearing; },
@@ -68,13 +74,13 @@ void _mock({
         const r = rot({x: (l.lng - c.x) * scale(), y: (l.lat - c.y) * scale()}, -bearing);
         const d = 1 + qq() * r.y;
         if (d <= 0) return {x: NaN, y: NaN};
-        return {x: mid.x + $kx * r.x / d, y: mid.y + $ky * r.y / d};
+        return {x: mid.x + KX * r.x / d, y: mid.y + KY * r.y / d};
       },
       unproject(p) {
         if (p.y < $horizon) return ll(NaN, NaN);
         const dy = p.y - mid.y;
-        const ry = dy / ($ky - qq() * dy);
-        const rx = (p.x - mid.x) * (1 + qq() * ry) / $kx;
+        const ry = dy / (KY - qq() * dy);
+        const rx = (p.x - mid.x) * (1 + qq() * ry) / KX;
         const w = rot({x: rx, y: ry}, bearing);
         return ll(c.x + w.x / scale(), c.y + w.y / scale());
       },
@@ -183,7 +189,7 @@ void main() {
       expect(_shown, 10);
     });
 
-    test('the gain it learns is the ground\'s, for the fling', () {
+    test('the gain it learns is the ground\'s', () {
       _mock(kx: 2.5, ky: 2.5);
       final pan = AnchoredPan(_map, _silently);
       _drag(pan, _start, _by);
@@ -323,5 +329,39 @@ void main() {
       expect(_map.getCenter().lng, before.center.lng);
       expect(_shown, 0);
     });
+  });
+  group('a fling measures the ground at the release', () {
+    test('after a terrain drag, on a flat map, it measures 1', () {
+      _mock(kx: 2.5, ky: 2.5);
+      final pan = AnchoredPan(_map, _silently);
+      _drag(pan, _start, _by);
+      expect(pan.gainAlong(const Offset(1, 0)), closeTo(2.5, 0.05));
+      // The style or the pitch changed: the ground is flat now.
+      _setGain(1, 1);
+      final before = _map.getCenter();
+      expect(pan.flingGain(const Offset(3, 1)), closeTo(1, 1e-6));
+      // The probe is undone and reported nowhere.
+      expect(_map.getCenter().lng, before.lng);
+      expect(_map.getCenter().lat, before.lat);
+      expect(_shown, 10);
+    });
+
+    test('over steep ground it measures the ground along the fling', () {
+      _mock(kx: 1.8, ky: 3.2);
+      final pan = AnchoredPan(_map, _silently);
+      expect(pan.flingGain(const Offset(1, 0)), closeTo(1.8, 1e-6));
+      expect(pan.flingGain(const Offset(0, -1)), closeTo(3.2, 1e-6));
+    });
+
+    test('over the sky it measures nothing and takes 1', () {
+      _mock(kx: 2, ky: 2, horizon: 1e9);
+      expect(AnchoredPan(_map, _silently).flingGain(const Offset(1, 0)), 1);
+    });
+  });
+
+  test('a step that moves nothing writes nothing', () {
+    _mock(kx: 2.5, ky: 2.5);
+    AnchoredPan(_map, _silently).apply(const GestureCameraUpdate());
+    expect(_log, isEmpty);
   });
 }
