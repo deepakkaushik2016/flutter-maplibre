@@ -20,6 +20,15 @@
 // at pitch 30, where its horizon is off screen; =off flies at pitch 30
 // without one. Compare the two runs' pitch_30 frames: the sky must cost
 // nothing when no horizon is in view. Informational, not part of the gate.
+// --dart-define=TERRAIN_PERF_STYLE=true-earth draws the style gallery's True
+// Earth look instead (Sentinel-2 imagery, OpenFreeMap labels and paths, and
+// its sky) over Mapterhorn's DEM, with the trail.
+// --dart-define=TERRAIN_PERF_PITCHES=50,60,70 picks the pitches of the
+// flights (default 50,60). The gate applies from pitch 50 up.
+// --dart-define=TERRAIN_PERF_LOAD_MODE=quality, balanced or performance sets
+// the terrain load mode first; empty keeps the map's default.
+// The report also holds the map frames of the zoom over the trail during the
+// rendering scrub (zoom_over_trail), which the gate leaves out.
 import 'dart:async';
 import 'dart:convert';
 
@@ -31,6 +40,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
 import 'shared/alps_fixture.dart';
+import 'shared/gallery_places.dart';
+import 'shared/gallery_styles.dart';
 import 'shared/terrain_load.dart';
 import 'shared/test_map.dart';
 
@@ -48,6 +59,57 @@ const _userLocation = bool.fromEnvironment('TERRAIN_PERF_USER_LOCATION');
 
 /// `on` or `off`: fly at pitch 30 too, with or without [_sky]. Empty: neither.
 const _skyVariant = String.fromEnvironment('TERRAIN_PERF_SKY');
+
+/// `true-earth`: the gallery's True Earth style. Empty: the trail style.
+const _styleVariant = String.fromEnvironment('TERRAIN_PERF_STYLE');
+
+/// The pitches of the flights.
+final List<double> _pitches = const String.fromEnvironment(
+  'TERRAIN_PERF_PITCHES',
+  defaultValue: '50,60',
+).split(',').map((pitch) => double.parse(pitch.trim())).toList();
+
+/// `quality`, `balanced` or `performance`. Empty: the map's default.
+const _loadMode = String.fromEnvironment('TERRAIN_PERF_LOAD_MODE');
+
+/// The gallery's True Earth style over the synthetic ridge's real place, with
+/// the trail of [trailStyle] on top, from the gallery's public sources.
+Map<String, Object?> _trueEarthStyle() {
+  final style = jsonDecode(
+    galleryStyle(
+      GalleryLook.trueEarth,
+      const GalleryPlace(
+        name: 'Ridge',
+        center: Geographic(lon: alpsLng, lat: alpsLat),
+        zoom: 13,
+        pitch: 60,
+        bearing: 0,
+        terrainClass: TerrainClass.alpine,
+        inUs: false,
+      ),
+      demUrl: 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp',
+      basemapTileJson: 'https://tiles.openfreemap.org/planet',
+      imageryUs: '',
+      imageryWorld: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg',
+    ),
+  ) as Map<String, Object?>;
+  final trail = trailStyle({
+    'sources': <String, Object?>{},
+    'layers': <Object?>[],
+  }, demId: 'dem');
+  return {
+    ...style,
+    'sources': {
+      ...(style['sources']! as Map<String, Object?>),
+      ...(trail['sources']! as Map<String, Object?>),
+    },
+    'layers': [
+      ...(style['layers']! as List<Object?>),
+      for (final layer in trail['layers']! as List<Object?>)
+        if ((layer! as Map<String, Object?>)['type'] == 'line') layer,
+    ],
+  };
+}
 
 /// The sky of the True Earth outdoor style.
 const Map<String, Object> _sky = {
@@ -127,7 +189,8 @@ void main() {
 
 void runTests(IntegrationTestWidgetsFlutterBinding binding) {
   testWidgets(
-    'terrain performance gate: flights at pitch 50 and 60, and a scrub',
+    'terrain performance gate: flights at pitch 50 and 60 (or the chosen '
+    'pitches), and a scrub',
     (tester) async {
       if (!_informational) {
         expect(
@@ -144,13 +207,16 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
       final fixture = await AlpsFixture.start();
       addTearDown(fixture.close);
 
+      const trueEarth = _styleVariant == 'true-earth';
       final basemap = _basemap.isEmpty
           ? null
           : jsonDecode((await http.get(Uri.parse(_basemap))).body)
                 as Map<String, Object?>;
-      final network = _networkDem.isNotEmpty || basemap != null;
+      final network = _networkDem.isNotEmpty || basemap != null || trueEarth;
       final base = fixture.style();
-      final style = basemap != null
+      final style = trueEarth
+          ? _trueEarthStyle()
+          : basemap != null
           ? _overBasemap(
               basemap,
               _networkDem.isEmpty ? _mapterhorn : _networkDem,
@@ -167,13 +233,13 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
               },
             }
           : base;
-      const exaggeration = alpsExaggeration;
+      const exaggeration = trueEarth ? 1.0 : alpsExaggeration;
       final map = await pumpMap(
         tester,
         options: MapOptions(
           style: MapStyle.json(
             jsonEncode({
-              ...(basemap != null ? style : trailStyle(style)),
+              ...(basemap != null || trueEarth ? style : trailStyle(style)),
               if (_skyVariant == 'on') 'sky': _sky,
             }),
           ),
@@ -190,8 +256,16 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
             ),
         ],
       );
+      if (_loadMode.isNotEmpty) {
+        await map.controller.setTerrainLoadMode(
+          TerrainLoadMode.values.byName(_loadMode),
+        );
+      }
       await map.style.setTerrain(
-        const Terrain(sourceId: 'alps', exaggeration: exaggeration),
+        const Terrain(
+          sourceId: trueEarth ? 'dem' : 'alps',
+          exaggeration: exaggeration,
+        ),
       );
       final recorder = MapFrameRecorder(map.controller);
       addTearDown(recorder.dispose);
@@ -205,6 +279,8 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
         'dem': network
             ? (_networkDem.isEmpty ? _mapterhorn : _networkDem)
             : 'fixture',
+        'style': trueEarth ? 'true-earth' : 'trail',
+        'load_mode': _loadMode.isEmpty ? 'default' : _loadMode,
         'basemap': basemap != null ? _basemap : 'none',
         'user_location': _userLocation,
         'sky': _skyVariant.isEmpty ? 'none' : _skyVariant,
@@ -216,7 +292,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
         if (value > limit) missed.add('$name: $value ms > $limit ms');
       }
 
-      for (final pitch in [if (_skyVariant.isNotEmpty) 30.0, 50.0, 60.0]) {
+      for (final pitch in [if (_skyVariant.isNotEmpty) 30.0, ..._pitches]) {
         final stop = Completer<void>();
         final flight = flyOverRidge(
           map.controller,
@@ -270,6 +346,7 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
         final animation = rendering
             ? zoomOverTrail(map.controller, stop: stop.future)
             : Future<void>.value();
+        if (rendering) recorder.start();
         final latencies = <double>[];
         final stopwatch = Stopwatch();
         for (final point in scrubPath()) {
@@ -290,6 +367,15 @@ void runTests(IntegrationTestWidgetsFlutterBinding binding) {
           await tester.pump();
         }
         stop.complete();
+        if (rendering) {
+          recorder.recording = false;
+          final frames = DurationStats.of(recorder.mapFrameMs);
+          report['zoom_over_trail'] = {
+            'map_frames': frames.toJson(),
+            'median_fps': frames.medianFps.toStringAsFixed(1),
+          };
+          debugPrint('terrain perf: zoom over the trail map frames $frames');
+        }
         await map.pumpFuture(
           animation,
           reason: 'the last zoom over the trail never ended',
