@@ -13,6 +13,7 @@ class GalleryPlace {
     required this.bearing,
     required this.terrainClass,
     required this.inUs,
+    this.variant,
   });
 
   final String name;
@@ -23,8 +24,26 @@ class GalleryPlace {
   final TerrainClass terrainClass;
   final bool inUs;
 
-  /// A name for file names, such as `mount-rainier`.
-  String get slug => name.toLowerCase().replaceAll(' ', '-');
+  /// What sets this shot apart from the place's mockup camera, such as `p70`.
+  final String? variant;
+
+  /// A name for file names, such as `mount-rainier` or `mount-rainier-p70`.
+  String get slug {
+    final base = name.toLowerCase().replaceAll(' ', '-');
+    return variant == null ? base : '$base-$variant';
+  }
+
+  /// The same place and camera, tilted to [pitch] degrees.
+  GalleryPlace atPitch(double pitch) => GalleryPlace(
+    name: name,
+    center: center,
+    zoom: zoom,
+    pitch: pitch,
+    bearing: bearing,
+    terrainClass: terrainClass,
+    inUs: inUs,
+    variant: 'p${pitch.round()}',
+  );
 
   CameraUpdate get camera => CameraUpdate.position(
     center: center,
@@ -34,7 +53,8 @@ class GalleryPlace {
   );
 }
 
-/// Pitch is capped at 60, the maximum of the app.
+/// The mockup cameras, at most 60° of pitch, the app's old maximum. In 3D the
+/// app now tilts up to 75°.
 const galleryPlaces = <GalleryPlace>[
   GalleryPlace(
     name: 'Yosemite',
@@ -108,4 +128,15 @@ const galleryPlaces = <GalleryPlace>[
     terrainClass: TerrainClass.alpine,
     inUs: false,
   ),
+];
+
+/// The pitch of the extra True Earth shots. On a phone the sky shows from about
+/// 69°, and the fog fades in from 60° to 70°, so neither shows at 60°.
+const galleryHighPitch = 70.0;
+
+/// The True Earth shots: every place at its mockup camera, then every place
+/// again at [galleryHighPitch].
+final galleryTrueEarthPlaces = <GalleryPlace>[
+  ...galleryPlaces,
+  for (final place in galleryPlaces) place.atPitch(galleryHighPitch),
 ];

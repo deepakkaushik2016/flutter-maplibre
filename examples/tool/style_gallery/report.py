@@ -4,8 +4,7 @@ Run with `python3 -I tool/style_gallery/report.py` from `examples/`.
 
 It first copies the native renders of the macOS example app (or the folder in
 GALLERY_NATIVE_DIR) into build/style_gallery/native. The mean absolute RGB
-difference is for review only, not a gate: the web references have a sky and
-fog that the native engine cannot draw yet.
+difference is for review only, not a gate.
 """
 import html
 import json
@@ -61,7 +60,8 @@ def main():
         d = mean_difference(os.path.join(OUT, native), os.path.join(OUT, web))
         diffs.append((name, d))
         rows.append(
-            f"<section><h2>{html.escape(entry['place'])} &middot; {html.escape(entry['look'])}</h2>"
+            f"<section><h2>{html.escape(entry['place'])} &middot; {html.escape(entry['look'])}"
+            f" &middot; pitch {entry['pitch']}</h2>"
             f"<p>mean abs RGB difference: <b>{d:.2f}</b> / 255 &middot; zoom {entry['zoom']}, "
             f"pitch {entry['pitch']}, bearing {entry['bearing']}</p>"
             f"<div class=pair><figure><img src='{web}'><figcaption>web (gl-js)</figcaption></figure>"

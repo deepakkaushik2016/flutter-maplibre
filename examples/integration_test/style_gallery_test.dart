@@ -1,5 +1,6 @@
 // A review tool, not part of all_test.dart: renders the two outdoor looks at
-// eight landscapes with the native engine and public tile sources.
+// eight landscapes with the native engine and public tile sources. True Earth
+// also renders each landscape at a pitch of 70°, where the sky and fog show.
 //
 // Run with `flutter test integration_test/style_gallery_test.dart -d macos`.
 // The PNGs, the style JSON and a manifest go to `<temp>/gallery`; see
@@ -72,7 +73,10 @@ void main() {
     const only = String.fromEnvironment('GALLERY_ONLY');
     final manifest = <Map<String, Object?>>[];
     for (final look in GalleryLook.values) {
-      for (final place in galleryPlaces) {
+      final places = look == GalleryLook.trueEarth
+          ? galleryTrueEarthPlaces
+          : galleryPlaces;
+      for (final place in places) {
         final name = '${look.slug}-${place.slug}';
         if (only.isNotEmpty && !name.contains(only)) continue;
         final style = galleryStyle(

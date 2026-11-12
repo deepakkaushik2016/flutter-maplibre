@@ -6,6 +6,11 @@ not part of `all_test.dart`. It uses public sources: Mapterhorn terrain,
 OpenFreeMap vector tiles, USGS National Map imagery in the US and EOX
 Sentinel-2 cloudless 2016 elsewhere.
 
+True Earth also renders every landscape at a pitch of 70°
+(`true-earth-<place>-p70`). In 3D the app tilts up to 75°; the sky shows from
+about 69° on a phone, and the fog fades in from 60° to 70°, so the mockup
+cameras, at 60° or less, show neither.
+
 ## Setup
 
 Once, in `examples/tool/style_gallery/`:
@@ -45,8 +50,8 @@ Environment:
   playwright module, the maplibre-gl 6.16.0 package (both default to
   `node_modules` of this folder) and the browsers.
 
-The difference is not a gate. Until the native engine draws the sky, True Earth
-differs most at the top of the image.
+The difference is not a gate. Compare the True Earth pitch-70 pairs for the sky
+and fog.
 
 `integration_test/shared/gallery_data.dart` holds the OpenFreeMap Liberty layers
 that the styles keep and the Yosemite trails.
