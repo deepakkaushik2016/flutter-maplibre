@@ -635,9 +635,15 @@ Each entry: the decision, then why.
   for members a partial object leaves out. Native passes JSON null to remove
   the sky; gl-js rejects null and removes it when the argument is left out.
   A sky set while a new style loads is not deferred as a terrain is: the new
-  style brings its own sky, and a replaced controller rejects the call with
-  a `StateError`. Neither platform reads the sky back yet; the C getter is
-  asynchronous and no caller needs it.
+  style brings its own sky, so both platforms reject the call with a
+  `StateError` (`DeferredTerrain.loading`), as they do on a replaced
+  controller. Unchecked, the call completed without an error on both:
+  gl-js 6.16 swaps styles as a diff, so it set the sky on the outgoing
+  style, still loaded while the new document was fetched, and the diff then
+  removed it; the C API took it in the middle of the load. `sky_test.dart`
+  holds a style load open (a delayed URL on web) to check the rejection.
+  Neither platform reads the sky back yet; the C getter is asynchronous and
+  no caller needs it.
 - **On web, raster-dem tiles load through the `sparse-dem` protocol
   (`maplibre_web/lib/src/sparse_dem.dart`), which answers an empty tile
   (204, or an empty body) with a 404.** A sparse terrain tileset answers the

@@ -77,8 +77,9 @@
   `Cache-Control` or `Expires` lapses), on web and native.
 - `StyleController.setSky(Sky(…))` sets the sky above the horizon and the
   fog that fades the distant ground into it, and `setSky(null)` removes it,
-  on web and native. Native maps and still images now pitch past 60, up to
-  85, so a steep camera shows the sky.
+  on web and native. `setSky` while a new style loads fails with a
+  `StateError`. Still images now take pitches up to 85, no longer only up
+  to 60, so a steep camera shows the sky.
 
 ### Performance
 

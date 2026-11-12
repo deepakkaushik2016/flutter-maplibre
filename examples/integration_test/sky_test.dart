@@ -28,10 +28,20 @@ const _camera = CameraUpdate.position(
 );
 
 const _terrain = Terrain(sourceId: 'alps', exaggeration: alpsExaggeration);
-const _blueSky = Sky(skyColor: ui.Color(0xFF0000FF));
 
-/// The background of [AlpsFixture.style].
-const _background = [0xdd, 0xdd, 0xdd];
+/// A blue sky over the fog of the True Earth outdoor style.
+const _blueSky = Sky(
+  skyColor: ui.Color(0xFF0000FF),
+  fogColor: ui.Color(0xFFC6D4E0),
+  fogGroundBlend: 0.35,
+);
+
+/// The background of the ground, dark so that the light fog shows on it.
+const _ground = [0x30, 0x30, 0x30];
+
+/// How far in logical pixels below the first ground on screen the fog is
+/// read: distant ground, where the fog is thickest.
+const _belowHorizon = 5.0;
 
 /// How far in logical pixels below the top edge the sky is read.
 const _top = 2.0;
@@ -50,16 +60,17 @@ bool _noSky(List<int> pixel, List<int> background) =>
 
 var _frames = 0;
 
-/// The RGBA color at the top center of the frame on screen.
-Future<List<int>> _topCenter(TestMap map) async {
+/// The RGBA color at [point], in logical pixels of the map, of the frame on
+/// screen.
+Future<List<int>> _pixelAt(TestMap map, Offset point) async {
   if (kIsWeb) {
     // maplibre-gl-js draws into a DOM element that Flutter can't read. Any
     // change to the style renders.
     final frame = await readMapFrame(
       () => unawaited(map.style.setGlobalState('frame', _frames++)),
     );
-    final x = frame.width ~/ 2;
-    final y = (_top * frame.scale).round();
+    final x = (point.dx * frame.scale).round();
+    final y = (point.dy * frame.scale).round();
     final offset = (y * frame.width + x) * 4;
     return frame.rgba.sublist(offset, offset + 4);
   }
@@ -67,11 +78,10 @@ Future<List<int>> _topCenter(TestMap map) async {
   final layer = tester.binding.renderViews.first.debugLayer! as OffsetLayer;
   // The root layer scales by the device pixel ratio, so the image is in
   // physical pixels.
-  final point =
-      (tester.getTopLeft(map.finder) + Offset(map.size.width / 2, _top)) *
-      tester.view.devicePixelRatio;
+  final physical =
+      (tester.getTopLeft(map.finder) + point) * tester.view.devicePixelRatio;
   final bytes = await tester.runAsync(() async {
-    final image = await layer.toImage(point & const ui.Size(1, 1));
+    final image = await layer.toImage(physical & const ui.Size(1, 1));
     final data = await image.toByteData();
     image.dispose();
     return data!;
@@ -79,24 +89,78 @@ Future<List<int>> _topCenter(TestMap map) async {
   return bytes!.buffer.asUint8List().toList();
 }
 
-/// Waits until the top center of the map shows a color that [matches],
-/// which a sky's transition takes a few frames to reach.
+/// The point [_belowHorizon] below the topmost ground of the terrain in
+/// the map's center column.
+Future<Offset> _distantGround(TestMap map) async {
+  final x = map.size.width / 2;
+  // The top of the screen is sky and its center is ground.
+  var sky = 0.0;
+  var ground = map.center.dy;
+  while (ground - sky > 1) {
+    final middle = (sky + ground) / 2;
+    if (await map.controller.toLngLatOnTerrain(Offset(x, middle)) == null) {
+      sky = middle;
+    } else {
+      ground = middle;
+    }
+  }
+  return Offset(x, ground + _belowHorizon);
+}
+
+/// Waits until the pixel at the point that [at] finds shows a color that
+/// [matches], which a sky's transition takes a few frames to reach.
+Future<List<int>> _waitForPixel(
+  TestMap map,
+  String what,
+  Future<Offset> Function(TestMap map) at,
+  bool Function(List<int> pixel) matches,
+) async {
+  final deadline = DateTime.now().add(defaultTimeout);
+  var point = await at(map);
+  var pixel = await _pixelAt(map, point);
+  while (!matches(pixel)) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('The map never showed $what at $point, last: $pixel');
+    }
+    await map.tester.pump(const Duration(milliseconds: 100));
+    point = await at(map);
+    pixel = await _pixelAt(map, point);
+  }
+  return pixel;
+}
+
+/// Waits until the top center of the map shows a color that [matches].
 Future<List<int>> _waitForTop(
   TestMap map,
   String what,
   bool Function(List<int> pixel) matches,
-) async {
-  final deadline = DateTime.now().add(defaultTimeout);
-  var pixel = await _topCenter(map);
-  while (!matches(pixel)) {
-    if (DateTime.now().isAfter(deadline)) {
-      fail('The top of the map never showed $what, last: $pixel');
-    }
-    await map.tester.pump(const Duration(milliseconds: 100));
-    pixel = await _topCenter(map);
-  }
-  return pixel;
+) => _waitForPixel(
+  map,
+  what,
+  (map) async => Offset(map.size.width / 2, _top),
+  matches,
+);
+
+/// Waits until the distant ground shows [ground] without fog.
+///
+/// Not on web: gl-js fades the fog out above the ground that the terrain
+/// queries find (its DEM tiles), over flat ground farther out, which no
+/// query locates.
+Future<void> _waitForNoFog(TestMap map, List<int> ground) async {
+  if (kIsWeb) return;
+  await _waitForPixel(
+    map,
+    'ground without fog',
+    _distantGround,
+    (pixel) => _near(pixel, ground),
+  );
 }
+
+/// Whether [pixel] of the dark [_ground] is lightened by the fog's light
+/// blue-gray.
+bool _fogged(List<int> pixel) =>
+    Iterable<int>.generate(3).every((i) => pixel[i] >= _ground[i] + 40) &&
+    pixel[2] >= pixel[0];
 
 void runTests() {
   group('sky', () {
@@ -107,6 +171,19 @@ void runTests() {
     });
     tearDown(() async => fixture.close());
 
+    /// The fixture's style with a background of [color].
+    Map<String, Object?> style({String color = '#303030'}) {
+      final style = fixture.style();
+      final layers = style['layers']! as List<Object?>;
+      style['layers'] = [
+        {
+          ...layers.first! as Map<String, Object?>,
+          'paint': {'background-color': color},
+        },
+      ];
+      return style;
+    }
+
     MapOptions options(Map<String, Object?> style) => MapOptions(
       style: MapStyle.json(jsonEncode(style)),
       initCamera: _camera,
@@ -115,56 +192,96 @@ void runTests() {
 
     /// A map at [_camera] over the synthetic ridge with its terrain.
     Future<TestMap> pumpSkyMap(WidgetTester tester) async {
-      final map = await pumpMap(tester, options: options(fixture.style()));
+      final map = await pumpMap(tester, options: options(style()));
       await map.style.setTerrain(_terrain);
       await fixture.waitUntilSettled(map, GroundView(map));
       return map;
     }
 
-    testWidgets('setSky shows the sky above the horizon', (tester) async {
-      final map = await pumpSkyMap(tester);
-      await _waitForTop(map, 'no sky', (p) => _noSky(p, _background));
-
+    /// Sets [_blueSky] and waits for its sky, and for its fog except on web
+    /// (see [_waitForNoFog]).
+    Future<List<int>> showBlueSky(TestMap map) async {
       await map.style.setSky(_blueSky);
-      await _waitForTop(map, 'the blue sky', _isBlue);
+      if (!kIsWeb) await _waitForPixel(map, 'fog', _distantGround, _fogged);
+      return _waitForTop(map, 'the blue sky', _isBlue);
+    }
+
+    testWidgets('setSky shows the sky above the horizon and fog below', (
+      tester,
+    ) async {
+      final map = await pumpSkyMap(tester);
+      await _waitForTop(map, 'no sky', (p) => _noSky(p, _ground));
+      await _waitForNoFog(map, _ground);
+
+      await showBlueSky(map);
     });
 
-    testWidgets('setSky(null) removes the sky', (tester) async {
+    testWidgets('setSky(null) removes the sky and its fog', (tester) async {
       final map = await pumpSkyMap(tester);
-      await map.style.setSky(_blueSky);
-      await _waitForTop(map, 'the blue sky', _isBlue);
+      await showBlueSky(map);
 
       await map.style.setSky(null);
-      await _waitForTop(map, 'no sky', (p) => _noSky(p, _background));
+      await _waitForTop(map, 'no sky', (p) => _noSky(p, _ground));
+      await _waitForNoFog(map, _ground);
     });
 
-    testWidgets('a new style without a sky drops the sky', (tester) async {
+    testWidgets('a new style without a sky drops the sky and its fog', (
+      tester,
+    ) async {
       final map = await pumpSkyMap(tester);
+      await showBlueSky(map);
+
+      // Another background, so the style changes.
+      const red = [0xcc, 0x22, 0x22];
+      final loads = map.styleLoads;
+      await map.setOptions(options(style(color: '#cc2222')));
+      await map.waitForStyleLoad(since: loads);
+      await map.style.setTerrain(_terrain);
+      await fixture.waitUntilSettled(map, GroundView(map));
+      await _waitForTop(map, 'no sky', (p) => _noSky(p, red));
+      await _waitForNoFog(map, red);
+    });
+
+    testWidgets('setSky while a new style loads fails with a StateError', (
+      tester,
+    ) async {
+      final map = await pumpSkyMap(tester);
+      final outgoing = map.style;
+      final loads = map.styleLoads;
+      final incoming = jsonEncode(style(color: '#cc2222'));
+      // On web, gl-js applies style JSON at once, as a diff, so the style
+      // comes from a URL whose answer waits until the call was made.
+      final answer = Completer<void>();
+      if (kIsWeb) {
+        addJsonProtocol('sky', (_) async {
+          await answer.future;
+          return incoming;
+        });
+      }
+      map.setOptionsNow(
+        MapOptions(
+          style: kIsWeb
+              ? const MapStyle.url('sky://style.json')
+              : MapStyle.json(incoming),
+          initCamera: _camera,
+          maxPitch: 85,
+        ),
+      );
+      final setting = outgoing.setSky(_blueSky);
+      answer.complete();
+      await expectLater(setting, throwsStateError);
+
+      // The style that loads takes a sky.
+      await map.waitForStyleLoad(since: loads);
       await map.style.setSky(_blueSky);
       await _waitForTop(map, 'the blue sky', _isBlue);
-
-      // The same style with another background, so the style changes.
-      const red = [0xcc, 0x22, 0x22];
-      final style = fixture.style();
-      final layers = style['layers']! as List<Object?>;
-      style['layers'] = [
-        {
-          ...layers.first! as Map<String, Object?>,
-          'paint': {'background-color': '#cc2222'},
-        },
-      ];
-      final loads = map.styleLoads;
-      await map.setOptions(options(style));
-      await map.waitForStyleLoad(since: loads);
-      await _waitForTop(map, 'no sky', (p) => _noSky(p, red));
     });
 
     testWidgets('a still image of a style with a sky matches the map', (
       tester,
     ) async {
       final map = await pumpSkyMap(tester);
-      await map.style.setSky(_blueSky);
-      final live = await _waitForTop(map, 'the blue sky', _isBlue);
+      final live = await showBlueSky(map);
 
       final renderer = await StillImageRenderer.createInstance();
       addTearDown(renderer.dispose);
@@ -172,7 +289,7 @@ void runTests() {
       final still = await decodeStill(
         await renderer.render(
           style: MapStyle.json(
-            jsonEncode({...fixture.style(), 'sky': _blueSky.toJson()}),
+            jsonEncode({...style(), 'sky': _blueSky.toJson()}),
           ),
           size: map.size,
           pixelRatio: pixelRatio,

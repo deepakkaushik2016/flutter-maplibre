@@ -441,6 +441,13 @@ class StyleControllerWeb extends StyleController implements StyleBackend {
   @override
   Future<void> setSky(Sky? sky) async {
     _checkCurrent();
+    // The incoming style brings its own sky, and the map takes no style
+    // change before it has loaded.
+    if (_deferredTerrain.loading) {
+      throw StateError(
+        'A new style is loading; set the sky once it has loaded.',
+      );
+    }
     _throwErrorEvents(
       () => sky == null ? _map.setSky() : _map.setSky(sky.toJson().jsify()),
     );
