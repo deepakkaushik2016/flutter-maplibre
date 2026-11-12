@@ -919,23 +919,39 @@ Each entry: the decision, then why.
   element; the map's element takes no pointers anymore. Non-interactive
   `WidgetLayer` markers still use `TranslucentPointer`, so drags that start
   on them pan the map on every platform.
-- **Web applies steps with public gl-js camera calls of duration 0.** A pan
-  puts `unproject(panFrom)` at `panTo` through `easeTo`'s `center` +
-  `offset`, so the grabbed location stays under the pointer in every
-  projection. gl-js's `around` drifts by up to 325 px on the globe (zoom 3,
-  cursor in a corner), so zoom, rotation and pitch around a point don't use
-  it: the web sink changes the camera, puts the location back with the pan
-  step, reads the result and restores the camera, all without reporting
-  events, and then applies the result in one `jumpTo`, or one animated
-  `easeTo` for a double tap. Wheel, pinch and double-tap zoom then keep the
-  location under the cursor within 0.01 px on the globe and on Mercator.
-  One gesture reports one camera move, although gl-js fires
-  movestart/moveend per step.
+- **Web applies steps with public gl-js camera calls of duration 0, and
+  measures where the ground lands.** gl-js resolves `easeTo`'s `offset` on
+  the flat plane at the centre's elevation, while `project` and `unproject`
+  see the terrain, so one `center` + `offset` step that puts
+  `unproject(panFrom)` at `panTo` lands ground that is higher or lower than
+  the centre far from the pointer, and a drag of such steps drifts further
+  with each move (measured: 355 px for a 103 px drag at pitch 50 over Yosemite
+  Valley). `AnchoredPan` (anchored_pan.dart) takes the ground under the
+  pointer once per gesture and on each move places it: `project` it, pan the
+  flat plane by the miss divided by a gain per screen axis, measure again, up
+  to four writes, stopping within 0.5 px. The gains (how far the ground moves
+  per pixel of flat plane, learnt from each step whose ground moved the same
+  way, kept within 0.2–20) are per axis because the ground is foreshortened
+  up the screen. A step that ends further away is undone and the next one is
+  halved unless it corrected a gain; a step whose ground barely moved hit a
+  clamp (bounds, zoom limits) and ends the placement. The held ground is
+  taken again when a move starts somewhere else (a finger added or lifted),
+  or when it is drawn more than three canvases from where it was put; over
+  the sky, where `unproject` gives no ground, the flat plane follows the
+  pointer. On a flat map it is one write per move, as before. gl-js's
+  `around` drifts by up to 325 px on the globe (zoom 3, cursor in a corner),
+  so zoom, rotation and pitch around a point don't use it: the sink changes
+  the camera, places the ground back the same way, reads the result and
+  restores the camera, and then applies the result in one `jumpTo`, or one
+  animated `easeTo` for a double tap. Every write of a step is silent; the
+  step then reports its camera with one `jumpTo`, so one pointer move
+  reports one camera move, and one gesture one movestart/moveend.
   A release flings with gl-js's own inertia constants (linearity 0.3,
   ease-out bezier; max speed and deceleration 1400 px/s and 2500 px/s² for
   pan, 40 and 20 levels for zoom, 360° and 1000° for bearing) in one
   `easeTo`, whose zoom and bearing target comes from the same exact-around
-  step.
+  step; its offset is divided by the learnt gain along the fling, so the
+  ground glides the fling's distance over terrain.
 - **Globe on web needs no forwarding to gl-js handlers.** Measured with
   gl-js 5.24 at 1024×768: the grabbed point stays within 0.1 px at zoom 2 and
   above, also at 80° N and pitched 45°. At zoom 1 a drag from the center to

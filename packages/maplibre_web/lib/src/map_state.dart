@@ -83,6 +83,17 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// the camera events don't report.
   var _silentCamera = false;
 
+  /// Runs camera [writes] that the camera events don't report.
+  void _silently(void Function() writes) {
+    final was = _silentCamera;
+    _silentCamera = true;
+    try {
+      writes();
+    } finally {
+      _silentCamera = was;
+    }
+  }
+
   /// A pointer that may open the browser's context menu went down on the
   /// map, which rotates and tilts with it instead.
   var _suppressContextMenu = false;
@@ -960,7 +971,7 @@ class _WebGestureCamera implements GestureCameraSink {
 
   interop.JsMap get _map => _state._map;
 
-  late final AnchoredPan _pan = AnchoredPan(_map);
+  late final AnchoredPan _pan = AnchoredPan(_map, _state._silently);
 
   @override
   void gestureStart() {
@@ -977,73 +988,10 @@ class _WebGestureCamera implements GestureCameraSink {
   @override
   void gestureUpdate(GestureCameraUpdate update) {
     if (!_state._mapCreated) return;
-    if (update.pans) {
-      // Puts the location under the pointer where the pointer is now, which
-      // keeps it under the pointer in every projection and over terrain.
-      _pan.pan(update.panFrom!, update.panTo!);
-    }
-    if (update.zoomBy == 0 && update.rotateBy == 0 && update.pitchBy == 0) {
-      return;
-    }
-    final around = update.around;
-    if (around == null) {
-      _map.jumpTo(
-        interop.JumpToOptions(
-          zoom: _map.getZoom() + update.zoomBy,
-          bearing: _map.getBearing() + update.rotateBy,
-          pitch: _map.getPitch() + update.pitchBy,
-        ),
-      );
-      return;
-    }
-    _map.jumpTo(
-      _cameraAround(
-        around,
-        zoomBy: update.zoomBy,
-        rotateBy: update.rotateBy,
-        pitchBy: update.pitchBy,
-      ).options,
-    );
+    // Keeps the ground under the pointer where the pointer is now, in every
+    // projection and over terrain, and reports one move.
+    _pan.apply(update);
   }
-
-  /// The camera after zooming, rotating and tilting by the given amounts
-  /// while the location at [around] stays there.
-  ///
-  /// GL JS's `around` drifts by hundreds of pixels on the globe. Changing the
-  /// camera first and then putting the location back with the pan step stays
-  /// exact in every projection. Those writes only work out the target and
-  /// are undone, so a step is one camera write and can be animated.
-  _WebCamera _cameraAround(
-    Offset around, {
-    double zoomBy = 0,
-    double rotateBy = 0,
-    double pitchBy = 0,
-  }) {
-    final location = _map.unproject(around.toJs());
-    final before = _camera();
-    _state._silentCamera = true;
-    try {
-      _map.jumpTo(
-        interop.JumpToOptions(
-          zoom: before.zoom + zoomBy,
-          bearing: before.bearing + rotateBy,
-          pitch: before.pitch + pitchBy,
-        ),
-      );
-      _pan.place(location, around);
-      return _camera();
-    } finally {
-      _map.jumpTo(before.options);
-      _state._silentCamera = false;
-    }
-  }
-
-  _WebCamera _camera() => (
-    center: _map.getCenter(),
-    zoom: _map.getZoom(),
-    bearing: _map.getBearing(),
-    pitch: _map.getPitch(),
-  );
 
   @override
   void gestureEnd({GestureVelocity velocity = GestureVelocity.zero}) {
@@ -1064,8 +1012,8 @@ class _WebGestureCamera implements GestureCameraSink {
     final seconds = max(pan.seconds, max(zoom.seconds, rotate.seconds));
     if (seconds == 0) return false;
     final target = zoom.amount == 0 && rotate.amount == 0
-        ? _camera()
-        : _cameraAround(
+        ? _pan.camera()
+        : _pan.cameraAround(
             velocity.around ?? _mapCenter,
             zoomBy: zoom.amount * velocity.zoom.sign,
             rotateBy: (rotate.amount * velocity.rotate.sign).clamp(-179, 179),
@@ -1079,9 +1027,15 @@ class _WebGestureCamera implements GestureCameraSink {
         center: target.center,
         zoom: target.zoom,
         bearing: target.bearing,
+        // The offset is on the flat plane; over terrain the ground moves
+        // about the learnt gain times as far, so the ground glides the
+        // fling's distance.
         offset: pan.amount == 0
             ? null
-            : (velocity.pan / velocity.pan.distance * pan.amount).toJs(),
+            : (velocity.pan /
+                      velocity.pan.distance *
+                      (pan.amount / _pan.gainAlong(velocity.pan)))
+                  .toJs(),
         duration: seconds * 1000,
         easing: _flingCurve.transform.toJS,
         essential: true,
@@ -1102,7 +1056,7 @@ class _WebGestureCamera implements GestureCameraSink {
     // end is reported.
     _state._endAnimation(CameraAnimationResult.cancelled);
     _map.stop();
-    final target = _cameraAround(around, zoomBy: levels);
+    final target = _pan.cameraAround(around, zoomBy: levels);
     _state._nextMoveByUser = true;
     _map.easeTo(
       interop.EaseToOptions(
@@ -1118,22 +1072,6 @@ class _WebGestureCamera implements GestureCameraSink {
     final canvas = _map.getCanvas();
     return Offset(canvas.clientWidth / 2, canvas.clientHeight / 2);
   }
-}
-
-typedef _WebCamera = ({
-  interop.LngLat center,
-  num zoom,
-  num bearing,
-  num pitch,
-});
-
-extension on _WebCamera {
-  interop.JumpToOptions get options => interop.JumpToOptions(
-    center: center,
-    zoom: zoom,
-    bearing: bearing,
-    pitch: pitch,
-  );
 }
 
 /// How one part of a fling slows down, as in GL JS: the release speed counts

@@ -268,9 +268,55 @@ void runTests() {
           expect(released, lessThanOrEqualTo(_tolerance));
           expectCenterOnGround(map, ground);
         },
-        // maplibre-gl-js moves the camera over terrain itself; this package
-        // anchors gestures only on native (see .agents/decisions.md).
-        skip: kIsWeb,
+      );
+    }
+
+    // On the web, at the lowest common tilt and at the steepest the app
+    // allows, where the ground is most foreshortened.
+    for (final (pitch, name, start, step) in const [
+      (50.0, 'at the center along the crest', Offset.zero, Offset(-5, 0)),
+      (50.0, 'on the near slope up the view', Offset(-60, 150), Offset(2, -4)),
+      (75.0, 'at the center along the crest', Offset.zero, Offset(-5, 0)),
+      (75.0, 'on the near slope up the view', Offset(-60, 150), Offset(2, -4)),
+    ]) {
+      testWidgets(
+        'at pitch ${pitch.round()}, a 40-move mouse drag $name keeps the '
+        'grabbed ground under the pointer',
+        (tester) async {
+          final (map, ground) = await pumpTerrainMap(tester, maxPitch: 75);
+          await map.controller.moveCamera(
+            CameraUpdate.position(pitch: pitch),
+          );
+          await map.waitForLatestFrame();
+          await fixture.waitUntilSettled(map, ground);
+          final from = map.center + start;
+          final pointer = await tester.startGesture(
+            map.toGlobal(from + const Offset(30, 0)),
+            kind: PointerDeviceKind.mouse,
+          );
+          await pointer.moveBy(const Offset(-30, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+          await fixture.waitUntilSettled(map, ground);
+          final grabbed = ground.groundAt(from);
+          for (var i = 0; i < 40; i++) {
+            await pointer.moveBy(step);
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+          final to = from + step * 40;
+          await fixture.waitUntilSettled(map, ground);
+          final held = await drift(map, ground, grabbed, to);
+          await pointer.up();
+          await fixture.waitUntilSettled(map, ground);
+          final released = await drift(map, ground, grabbed, to);
+          debugPrint(
+            'pitch ${pitch.round()} mouse drag $name: '
+            '${held.toStringAsFixed(2)} px held, '
+            '${released.toStringAsFixed(2)} px released',
+          );
+          expect(held, lessThanOrEqualTo(_tolerance));
+          expect(released, lessThanOrEqualTo(_tolerance));
+        },
+        skip: !kIsWeb,
       );
     }
 
@@ -446,7 +492,7 @@ void runTests() {
       debugPrint('wheel zoom drift: ${moved.toStringAsFixed(2)} px');
       expect(moved, lessThanOrEqualTo(_tolerance));
       expectCenterOnGround(map, ground);
-    }, skip: kIsWeb);
+    });
 
     /// Screen points over the ground: the center, both sides, near and far.
     const groundPoints = [

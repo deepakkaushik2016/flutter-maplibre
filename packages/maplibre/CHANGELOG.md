@@ -97,6 +97,13 @@
   it is now shown once that work ends, and a frame that ends after a newer
   one is skipped.
 
+### Bug Fixes
+
+- Web: a drag, wheel zoom, pinch, rotation or tilt over terrain keeps the
+  grabbed ground under the pointer. It used to drift further with each move
+  where the ground was higher or lower than the map's centre (355 px for a
+  103 px drag at pitch 50).
+
 ## 0.4.0-pre.2
 
 The second pre-release of 0.4 reworks the event, camera, query and gesture
