@@ -26,7 +26,8 @@ import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 /// with the tiles it has, and fails if a style, sprite or glyph range it
 /// needs is missing.
 ///
-/// Not on web, where [createInstance] throws an [UnsupportedError].
+/// On web, the network status does nothing, and images are drawn one at a
+/// time: a request waits for the ones before it, within its timeout.
 ///
 /// {@category Offline}
 abstract interface class StillImageRenderer {

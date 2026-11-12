@@ -22,6 +22,8 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
     loads, for both platforms.
   - `lib/src/style/sky.dart`: the `Sky` of a style, its sky and fog.
 - `packages/maplibre_web`: browser, via maplibre-gl-js.
+  - `lib/src/still_image.dart`: the `StillImageRenderer`, a map in a hidden
+    container per image.
 - `packages/maplibre_geolocator`: optional adapter from `geolocator` positions
   to the `UserLocationLayer` of `maplibre`.
 - `packages/maplibre_native`: every other platform, on the MapLibre Native C API.

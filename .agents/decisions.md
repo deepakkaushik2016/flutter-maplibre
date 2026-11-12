@@ -685,9 +685,26 @@ Each entry: the decision, then why.
   commands complete only once the document parsed, so the renderer awaits them
   instead of following map events. `timeout` and `dispose` end a request at
   once with their own error and release its session and map, which cancels a
-  still that is still running. It is not on web:
-  a faithful still there needs a second WebGL context in a hidden container and
-  the map state's routing of sparse raster-dem tiles.
+  still that is still running.
+- **On web, `StillImageRenderer` draws each image with a gl-js map of its own
+  in a hidden container, one image at a time.** The map takes
+  `preserveDrawingBuffer`, the image's pixel ratio, a max pitch of 85, a fade
+  of 0 and `centerClampedToGround` unless the caller gives `centerAltitude`
+  (then the camera's `elevation`); the terrain is set once the style loads,
+  and the canvas is read with `toBlob` at the first `idle` after it. It routes
+  raster-dem tiles through the sparse-dem protocol and applies
+  `MapLibreNetwork` as a map does, and any `error` event fails the image, as
+  native fails one whose resource failed (gl-js reports no error for a
+  404 tile). Requests queue so that at most one such map, and one more WebGL
+  context than the page's maps, lives at a time: browsers drop the oldest
+  context past a limit of their own, and `map.remove()` releases it. A
+  request's timeout counts from the call, so it includes the wait. A camera
+  under the terrain leaves the image clear, where native shows the style's
+  background, since gl-js draws the background onto the terrain.
+  Integration tests on web only report `testWidgets` failures (the binding
+  records results in `runTest`); a failing `test` or `setUp` passes
+  silently, so `still_image_test.dart` uses `testWidgets` and checks
+  `createInstance` outside its group's `setUp`.
 
 ## Gestures
 

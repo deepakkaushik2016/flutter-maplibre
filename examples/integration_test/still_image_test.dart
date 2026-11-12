@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
+import 'shared/browser.dart';
 import 'shared/still_png.dart';
 
 void main() {
@@ -18,6 +19,10 @@ void main() {
 
 const _ground = [255, 0, 0, 255];
 const _background = [0, 0, 255, 255];
+
+/// What a camera under the terrain shows: the style's background. On web,
+/// where the background is drawn onto the terrain, the image stays clear.
+const List<int> _underground = kIsWeb ? [0, 0, 0, 0] : _background;
 
 /// A flank of Everest: the camera's center at sea level would be under it.
 const _everest = CameraUpdate.position(
@@ -49,20 +54,25 @@ Future<Uint8List> _tile(List<int> rgba) async {
   return data!.buffer.asUint8List();
 }
 
-/// A loopback server of ground 5400 m high with a red raster over it.
+/// A loopback server of ground 5400 m high with a red raster over it. In the
+/// browser, which has no server, a custom maplibre-gl-js protocol answers
+/// the same paths.
 class _Server {
   _Server._(this._http, this._dem, this._raster) {
-    _http.listen(_serve);
+    _http?.listen(_serve);
+    if (kIsWeb) addFixtureProtocol(_scheme, _respond);
   }
 
   static Future<_Server> start() async => _Server._(
-    await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
+    kIsWeb ? null : await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
     // 5400 m in Terrarium: 5400 + 32768 = 149 * 256 + 24.
     await _tile(const [149, 24, 0, 255]),
     await _tile(_ground),
   );
 
-  final HttpServer _http;
+  static const _scheme = 'still-fixture';
+
+  final HttpServer? _http;
   final Uint8List _dem;
   final Uint8List _raster;
 
@@ -75,27 +85,41 @@ class _Server {
 
   /// A style path no other server shares, so that no cached style of a
   /// server with the same recycled loopback port can answer for this one.
-  final _stylePath = '/style-${_nextId++}-${Random().nextInt(1 << 32)}.json';
+  final _stylePath = '/style-${_nextId++}-${Random().nextInt(0x7fffffff)}.json';
   static int _nextId = 0;
 
-  String get _url => 'http://127.0.0.1:${_http.port}';
+  String get _url =>
+      kIsWeb ? '$_scheme://fixture' : 'http://127.0.0.1:${_http!.port}';
   String get styleUrl => '$_url$_stylePath';
+
+  /// The answer to a request for [path]: the style's JSON, a PNG, or null
+  /// for 404 Not Found.
+  Object? _answer(String path) {
+    if (path == _stylePath) {
+      styleRequests++;
+      return style;
+    } else if (path.startsWith('/sprites/') || path.startsWith('/glyphs/')) {
+      styleAssetRequests++;
+      return null;
+    } else if (path.startsWith('/dem/13/') && sparse) {
+      return null;
+    }
+    return path.startsWith('/dem/') ? _dem : _raster;
+  }
+
+  Future<Object?> _respond(String url) async => _answer(Uri.parse(url).path);
 
   Future<void> _serve(HttpRequest request) async {
     final response = request.response;
-    final path = request.uri.path;
-    if (path == _stylePath) {
-      styleRequests++;
-      response.write(style);
-    } else if (path.startsWith('/sprites/') || path.startsWith('/glyphs/')) {
-      styleAssetRequests++;
-      response.statusCode = HttpStatus.notFound;
-    } else if (path.startsWith('/dem/13/') && sparse) {
-      response.statusCode = HttpStatus.notFound;
-    } else {
-      response
-        ..headers.contentType = ContentType('image', 'png')
-        ..add(path.startsWith('/dem/') ? _dem : _raster);
+    switch (_answer(request.uri.path)) {
+      case final String json:
+        response.write(json);
+      case final Uint8List png:
+        response
+          ..headers.contentType = ContentType('image', 'png')
+          ..add(png);
+      default:
+        response.statusCode = HttpStatus.notFound;
     }
     await response.close();
   }
@@ -179,17 +203,24 @@ class _Server {
     }),
   );
 
-  Future<void> close() => _http.close(force: true);
+  Future<void> close() async => _http?.close(force: true);
 }
 
 void runTests() {
+  // Outside the group: on web, a failure in a setUp is not reported.
+  testWidgets('StillImageRenderer is supported', (tester) async {
+    expect(StillImageRenderer.isSupported, isTrue);
+    (await StillImageRenderer.createInstance()).dispose();
+  });
+
   group('StillImageRenderer', () {
     late _Server server;
     late StillImageRenderer renderer;
 
     setUp(() async {
-      server = await _Server.start();
+      // Loads maplibre-gl-js on web, which the server's protocol needs.
       renderer = await StillImageRenderer.createInstance();
+      server = await _Server.start();
     });
 
     tearDown(() async {
@@ -209,18 +240,24 @@ void runTests() {
       ),
     );
 
-    test('draws ground high above the camera, at any size', () async {
+    testWidgets('draws ground high above the camera, at any size', (
+      tester,
+    ) async {
       final image = await render();
       expect(image.width, 128);
       expect(image.colorAt(64, 64), _ground);
     });
 
-    test('a center height the caller gives replaces the clamp', () async {
-      expect((await render(centerAltitude: 0)).colorAt(64, 64), _background);
+    testWidgets('a center height the caller gives replaces the clamp', (
+      tester,
+    ) async {
+      expect((await render(centerAltitude: 0)).colorAt(64, 64), _underground);
       expect((await render(centerAltitude: 5400)).colorAt(64, 64), _ground);
     });
 
-    test('terrain over a sparse DEM draws as over a dense one', () async {
+    testWidgets('terrain over a sparse DEM draws as over a dense one', (
+      tester,
+    ) async {
       final dense = await render();
       server.sparse = true;
       // Another region, so nothing of the dense DEM comes from the cache.
@@ -241,7 +278,9 @@ void runTests() {
       expect(sparse.differenceFrom(dense), lessThan(0.01));
     });
 
-    test('a style missing offline fails instead of hanging', () async {
+    testWidgets('a style missing offline fails instead of hanging', (
+      tester,
+    ) async {
       MapLibreNetwork.status = NetworkStatus.offline;
       await expectLater(
         renderer.render(
@@ -253,9 +292,11 @@ void runTests() {
         throwsA(isA<StillImageException>()),
       );
       expect(server.styleRequests, 0);
-    });
+    }, skip: _offlineSkip);
 
-    test('a sprite missing offline fails instead of hanging', () async {
+    testWidgets('a sprite missing offline fails instead of hanging', (
+      tester,
+    ) async {
       MapLibreNetwork.status = NetworkStatus.offline;
       await expectLater(
         renderer.render(
@@ -267,9 +308,11 @@ void runTests() {
         throwsA(isA<StillImageException>()),
       );
       expect(server.styleAssetRequests, 0);
-    });
+    }, skip: _offlineSkip);
 
-    test('a glyph range missing offline fails instead of hanging', () async {
+    testWidgets('a glyph range missing offline fails instead of hanging', (
+      tester,
+    ) async {
       MapLibreNetwork.status = NetworkStatus.offline;
       await expectLater(
         renderer.render(
@@ -281,16 +324,28 @@ void runTests() {
         throwsA(isA<StillImageException>()),
       );
       expect(server.styleAssetRequests, 0);
-    });
+    }, skip: _offlineSkip);
 
-    test('overlapping requests each finish', () async {
+    testWidgets('overlapping requests each finish', (tester) async {
+      // In the browser, at most one image's map lives at a time.
+      var maps = 0;
+      final count = kIsWeb
+          ? Timer.periodic(const Duration(milliseconds: 1), (_) {
+              maps = max(maps, countElements('.maplibre-still-image'));
+            })
+          : null;
       final images = await Future.wait([for (var i = 0; i < 3; i++) render()]);
+      count?.cancel();
       for (final image in images) {
         expect(image.colorAt(64, 64), _ground);
       }
+      if (kIsWeb) {
+        expect(maps, 1);
+        expect(countElements('.maplibre-still-image'), 0);
+      }
     });
 
-    test('dispose during a request fails it', () async {
+    testWidgets('dispose during a request fails it', (tester) async {
       final running = renderer.render(
         style: MapStyle.url(server.styleUrl),
         size: _size,
@@ -301,5 +356,9 @@ void runTests() {
       renderer.dispose();
       await expectLater(running, throwsA(isA<StillImageException>()));
     });
-  }, skip: kIsWeb);
+  });
 }
+
+/// The network status does nothing on web, where the browser decides when a
+/// request reaches the network.
+const bool _offlineSkip = kIsWeb;

@@ -237,6 +237,12 @@ extension type MapOptions._(JSObject _) implements JSObject {
     bool? interactive,
     JSFunction? transformRequest,
     bool? centerClampedToGround,
+    JSAny? canvasContextAttributes,
+    num? pixelRatio,
+    JSAny? maxCanvasSize,
+    num? maxPitch,
+    num? fadeDuration,
+    bool? trackResize,
   });
 }
 

@@ -72,6 +72,63 @@ void addNotFoundProtocol(
   );
 }
 
+/// Answers maplibre-gl-js requests for `<scheme>://…` URLs with what
+/// [respond] completes with: JSON text for a JSON request, bytes for a tile
+/// or an image, or null for the error of a 404 Not Found.
+void addFixtureProtocol(
+  String scheme,
+  Future<Object?> Function(String url) respond,
+) {
+  final maplibre = globalContext.getProperty<JSObject>('maplibregl'.toJS);
+  final ajaxError = maplibre.getProperty<JSFunction>('AJAXError'.toJS);
+  final blob = globalContext.getProperty<JSFunction>('Blob'.toJS);
+  final json = globalContext.getProperty<JSObject>('JSON'.toJS);
+  final promise = globalContext.getProperty<JSFunction>('Promise'.toJS);
+  maplibre.callMethod<JSAny?>(
+    'addProtocol'.toJS,
+    scheme.toJS,
+    ((JSObject request, JSAny? _) {
+      final url = request.getProperty<JSString>('url'.toJS).toDart;
+      return promise.callAsConstructor<JSObject>(
+        ((JSFunction resolve, JSFunction reject) {
+          respond(url).then((body) {
+            if (body == null) {
+              final error = ajaxError.callAsConstructor<JSObject>(
+                404.toJS,
+                'Not Found'.toJS,
+                url.toJS,
+                blob.callAsConstructor<JSObject>(JSArray<JSAny?>()),
+              );
+              reject.callAsFunction(null, error);
+              return;
+            }
+            final data = switch (body) {
+              final String text => json.callMethod<JSAny?>(
+                'parse'.toJS,
+                text.toJS,
+              ),
+              // A copy, as a view may lie in a larger buffer.
+              final Uint8List bytes => Uint8List.fromList(bytes).buffer.toJS,
+              _ => throw ArgumentError.value(body, 'body'),
+            };
+            resolve.callAsFunction(
+              null,
+              JSObject()..setProperty('data'.toJS, data),
+            );
+          });
+        }).toJS,
+      );
+    }).toJS,
+  );
+}
+
+/// How many elements of the page match the CSS [selector].
+int countElements(String selector) => globalContext
+    .getProperty<JSObject>('document'.toJS)
+    .callMethod<JSObject>('querySelectorAll'.toJS, selector.toJS)
+    .getProperty<JSNumber>('length'.toJS)
+    .toDartInt;
+
 /// The pixels of a frame that maplibre-gl-js drew: `rgba` rows of `width`
 /// pixels, `scale` pixels per logical pixel of the map.
 typedef MapFrame = ({int width, int height, Uint8List rgba, double scale});

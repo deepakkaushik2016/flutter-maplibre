@@ -303,6 +303,6 @@ void runTests() {
         isTrue,
         reason: 'the still image has $top, the map $live',
       );
-    }, skip: kIsWeb);
+    });
   });
 }

@@ -21,6 +21,18 @@ void addNotFoundProtocol(
   Future<void> Function(String url) until,
 ) => throw UnsupportedError('Only maplibre-gl-js has custom protocols.');
 
+/// Answers maplibre-gl-js requests for `<scheme>://…` URLs with what
+/// [respond] completes with: JSON text for a JSON request, bytes for a tile
+/// or an image, or null for the error of a 404 Not Found.
+void addFixtureProtocol(
+  String scheme,
+  Future<Object?> Function(String url) respond,
+) => throw UnsupportedError('Only maplibre-gl-js has custom protocols.');
+
+/// How many elements of the page match the CSS [selector].
+int countElements(String selector) =>
+    throw UnsupportedError('Only the browser has a page.');
+
 /// The pixels of a frame that maplibre-gl-js drew: `rgba` rows of `width`
 /// pixels, `scale` pixels per logical pixel of the map.
 typedef MapFrame = ({int width, int height, Uint8List rgba, double scale});

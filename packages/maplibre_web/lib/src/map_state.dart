@@ -123,15 +123,19 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
       _map = interop.JsMap(
         interop.MapOptions(
           container: _htmlElement,
-          style: _jsStyle(options.style),
+          style: options.style.toJs(),
           attributionControl: false,
           // MapGestureDetector handles the input.
           interactive: false,
           // MapLibreNetwork first, then the sparse-dem routing of raster-dem
           // tiles, which fetches the transformed request.
           transformRequest:
-              ((String url, String? resourceType) => _rasterDemTiles
-                      .transformRequest(url, resourceType, _transformRequest))
+              ((String url, String? resourceType) =>
+                      _rasterDemTiles.transformRequest(
+                        url,
+                        resourceType,
+                        transformNetworkRequest,
+                      ))
                   .toJS,
           centerClampedToGround: options.centerClampedToGround,
         ),
@@ -416,7 +420,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// Applies [MapLibreNetwork] to a request, read anew for each one, so
   /// that changes reach the maps that exist. Returns undefined to leave the
   /// request as it is.
-  static interop.RequestParameters? _transformRequest(
+  static interop.RequestParameters? transformNetworkRequest(
     String url,
     String? resourceType,
   ) {
@@ -610,20 +614,9 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// With [resetPadding], the padding of earlier camera moves is reset
   /// before a target is fitted, which stops a running animation.
   JSObject? _target(CameraUpdate update, {bool resetPadding = true}) {
-    final options = JSObject();
     switch (update) {
-      case CameraUpdatePosition(:final center, :final padding, :final anchor):
-        if (center != null) options['center'] = center.toJs();
-        if (update.zoom case final zoom?) options['zoom'] = zoom.toJS;
-        if (update.bearing case final bearing?) {
-          options['bearing'] = bearing.toJS;
-        }
-        if (update.pitch case final pitch?) options['pitch'] = pitch.toJS;
-        if (update.roll case final roll?) options['roll'] = roll.toJS;
-        if (padding != null) options['padding'] = padding.toJs();
-        if (anchor != null) {
-          options['around'] = _map.unproject(anchor.toJs());
-        }
+      case CameraUpdatePosition():
+        return update.toJs(_map);
       case CameraUpdateFit():
         final padding = update.padding.toJs();
         if (resetPadding) {
@@ -640,24 +633,8 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
           }
           _targetStoppedCamera = true;
         }
-        final pitch = update.pitch ?? _map.getPitch();
-        final camera = _map.cameraForBounds(
-          update.bounds.toJs(),
-          interop.FitBoundsOptions(
-            padding: padding,
-            bearing: update.bearing ?? _map.getBearing(),
-            pitch: pitch,
-            // An explicit null would reach gl-js as a max zoom of 0.
-            maxZoom: update.maxZoom ?? double.maxFinite,
-          ),
-        );
-        if (camera == null) return null;
-        options['center'] = camera.center;
-        options['zoom'] = camera.zoom.toJS;
-        options['bearing'] = camera.bearing.toJS;
-        options['pitch'] = (camera.pitch ?? pitch).toJS;
+        return update.toJs(_map);
     }
-    return options;
   }
 
   /// Ends the running [animateCamera] with [result].
@@ -863,31 +840,13 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     if (target != null) _map.jumpTo(target as interop.JumpToOptions);
   }
 
-  JSAny _jsStyle(MapStyle style) => switch (style) {
-    MapStyleJson(:final json) =>
-      (jsonDecode(json) as Map<String, dynamic>).jsify() ??
-          (throw StateError('Failed to convert style JSON to JS object.')),
-    MapStyleUrl() || MapStyleAsset() => _styleUrl(style)!.toJS,
-    MapStyleFile() => throw UnsupportedError(
-      'MapStyle.file is not supported on web, use MapStyle.url or '
-      'MapStyle.asset.',
-    ),
-  };
-
-  /// The URL that gl-js loads [style] from, or null for JSON text.
-  static String? _styleUrl(MapStyle style) => switch (style) {
-    MapStyleUrl(:final url) => url,
-    MapStyleAsset(:final asset) => AssetManager().getAssetUrl(asset),
-    MapStyleJson() || MapStyleFile() => null,
-  };
-
   /// Loads [style], see [MapOptions.style].
   void _setStyle(MapStyle style) {
     // Only the next LayerManager sees MapLibreMap.layers: the layers of the
     // old one go with the old style.
     layerManager = null;
     final generation = _deferredTerrain.styleLoading();
-    _loadingStyleUrl = _styleUrl(style);
+    _loadingStyleUrl = style.jsUrl;
     // A style replaced before it loaded fires no `style.load` of its own.
     if (_styleLoadListener case final listener?) {
       _map.off(interop.MapEventType.styleLoad, listener);
@@ -900,7 +859,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     final before = _map.style;
     // The empty tiles the page knew may be another tileset's in this style.
     knownEmptyTiles.clear();
-    _map.setStyle(_jsStyle(style));
+    _map.setStyle(style.toJs());
     _onLoadingStarted();
     _rasterDemTiles.refresh((id) => _map.getSource(id));
     // gl-js diffs a JSON style at once. A diff without changes, or a style
