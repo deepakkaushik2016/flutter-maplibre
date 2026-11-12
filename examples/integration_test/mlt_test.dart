@@ -88,18 +88,21 @@ void runTests() {
   group('MapLibre Tiles (MLT)', () {
     late _MltServer server;
 
-    setUp(() async => server = await _MltServer.start());
-    tearDown(() => server.close());
-
-    Future<TestMap> pumpMltMap(WidgetTester tester, {required bool fastPfor}) =>
-        pumpMap(
-          tester,
-          options: MapOptions(
-            style: MapStyle.json(server.style),
-            initCamera: const CameraUpdate.position(zoom: 0.5),
-            fastPforEnabled: fastPfor,
-          ),
-        );
+    Future<TestMap> pumpMltMap(
+      WidgetTester tester, {
+      required bool fastPfor,
+    }) async {
+      server = await _MltServer.start();
+      addTearDown(server.close);
+      return pumpMap(
+        tester,
+        options: MapOptions(
+          style: MapStyle.json(server.style),
+          initCamera: const CameraUpdate.position(zoom: 0.5),
+          fastPforEnabled: fastPfor,
+        ),
+      );
+    }
 
     testWidgets('with FastPFOR integer streams decode when enabled', (
       tester,

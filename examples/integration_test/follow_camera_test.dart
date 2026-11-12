@@ -61,24 +61,24 @@ List<Geographic> _track(int count) => [
 
 void runTests() {
   group('following GPS fixes over terrain', () {
+    // Started by each test rather than in a setUp: on web, a failure in a
+    // setUp is not reported, and the test would pass without running.
     late AlpsFixture fixture;
     late StreamController<UserLocation> locations;
 
-    setUp(() async {
+    Future<void> startFixture() async {
       fixture = await AlpsFixture.start();
+      addTearDown(fixture.close);
       locations = StreamController<UserLocation>.broadcast();
-    });
-
-    tearDown(() async {
-      await locations.close();
-      await fixture.close();
-    });
+      addTearDown(locations.close);
+    }
 
     Future<TestMap> pumpFollowMap(
       WidgetTester tester,
       Geographic start, {
       MapEventCallback<MapEventRenderFrame>? onRenderFrame,
     }) async {
+      await startFixture();
       final map = await pumpMap(
         tester,
         options: MapOptions(

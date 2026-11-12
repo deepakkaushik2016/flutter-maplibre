@@ -204,22 +204,28 @@ void runTests() {
   });
 
   group('terrain', () {
+    // Started by each test rather than in a setUp: on web, a failure in a
+    // setUp is not reported, and the test would pass without running.
     late _Fixture fixture;
-    setUp(() async {
+
+    Future<void> startFixture() async {
       clearResourceTimings();
       fixture = await _Fixture.start();
-    });
-    tearDown(() async {
-      fixture
-        ..releaseStyles()
-        ..failSprites();
-      await fixture.close();
-    });
+      addTearDown(() async {
+        fixture
+          ..releaseStyles()
+          ..failSprites();
+        await fixture.close();
+      });
+    }
 
-    Future<TestMap> pumpTerrainMap(WidgetTester tester) => pumpMap(
-      tester,
-      options: _options(MapStyle.json(jsonEncode(fixture.style()))),
-    );
+    Future<TestMap> pumpTerrainMap(WidgetTester tester) async {
+      await startFixture();
+      return pumpMap(
+        tester,
+        options: _options(MapStyle.json(jsonEncode(fixture.style()))),
+      );
+    }
 
     testWidgets('setTerrain sets the terrain that terrain reads back', (
       tester,
@@ -482,6 +488,7 @@ void runTests() {
     });
 
     testWidgets('reads the terrain of a style document', (tester) async {
+      await startFixture();
       for (final (json, terrain) in [
         (
           {'source': 'dem', 'exaggeration': 1.5},
@@ -820,12 +827,15 @@ void runTests() {
   });
 
   group('terrain elevation', () {
+    // Started by each test rather than in a setUp: on web, a failure in a
+    // setUp is not reported, and the test would pass without running.
     late AlpsFixture fixture;
-    setUp(() async {
+
+    Future<void> startFixture() async {
       clearResourceTimings();
       fixture = await AlpsFixture.start();
-    });
-    tearDown(() async => fixture.close());
+      addTearDown(fixture.close);
+    }
 
     /// A map at the Alps camera over the synthetic ridge, with its terrain
     /// drawn [exaggeration] times once the camera settled on it, or without
@@ -834,6 +844,7 @@ void runTests() {
       WidgetTester tester, {
       double? exaggeration,
     }) async {
+      await startFixture();
       final map = await pumpMap(
         tester,
         options: MapOptions(
@@ -915,6 +926,7 @@ void runTests() {
     });
 
     testWidgets('completes before the first frame', (tester) async {
+      await startFixture();
       final style = {
         ...fixture.style(),
         'terrain': {'source': 'alps'},

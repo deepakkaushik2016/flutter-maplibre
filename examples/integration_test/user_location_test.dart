@@ -34,17 +34,19 @@ const _tolerance = 2.0;
 
 void runTests() {
   group('UserLocationLayer on terrain', () {
+    // Started by each test rather than in a setUp: on web, a failure in a
+    // setUp is not reported, and the test would pass without running.
     late AlpsFixture fixture;
     late StreamController<UserLocation> locations;
-    setUp(() async {
+
+    Future<void> startFixture() async {
       clearResourceTimings();
       fixture = await AlpsFixture.start();
+      // Locations close first, then the fixture.
+      addTearDown(fixture.close);
       locations = StreamController<UserLocation>.broadcast();
-    });
-    tearDown(() async {
-      await locations.close();
-      await fixture.close();
-    });
+      addTearDown(locations.close);
+    }
 
     MapOptions options({Map<String, Object?>? style}) => MapOptions(
       style: MapStyle.json(jsonEncode(style ?? fixture.style())),
@@ -61,6 +63,7 @@ void runTests() {
       ),
       UserLocationTracking tracking = UserLocationTracking.none,
     }) async {
+      await startFixture();
       final map = await pumpMap(
         tester,
         options: options(),

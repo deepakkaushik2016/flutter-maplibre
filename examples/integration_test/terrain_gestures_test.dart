@@ -29,12 +29,16 @@ const _terrain = Terrain(sourceId: 'alps', exaggeration: alpsExaggeration);
 
 void runTests() {
   group('terrain gestures', () {
+    // Started by each test rather than in a setUp: on web, a failure in a
+    // setUp is not reported, and the test would pass without running.
     late AlpsFixture fixture;
-    setUp(() async {
+
+    /// Starts the fixture of a test, whose DEM tiles wait [demDelay].
+    Future<void> startFixture({Duration demDelay = Duration.zero}) async {
       clearResourceTimings();
-      fixture = await AlpsFixture.start();
-    });
-    tearDown(() async => fixture.close());
+      fixture = await AlpsFixture.start(demDelay: demDelay);
+      addTearDown(fixture.close);
+    }
 
     /// The options of a map at the Alps camera over the synthetic ridge.
     MapOptions terrainOptions({
@@ -53,7 +57,9 @@ void runTests() {
       WidgetTester tester, {
       bool centerClampedToGround = true,
       double maxPitch = 60,
+      Duration demDelay = Duration.zero,
     }) async {
+      await startFixture(demDelay: demDelay);
       final map = await pumpMap(
         tester,
         options: terrainOptions(
@@ -115,10 +121,11 @@ void runTests() {
     testWidgets('a map counts as settled once it draws its slow DEM', (
       tester,
     ) async {
-      await fixture.close();
       // Longer than the frames waitUntilSettled needs to see a still view.
-      fixture = await AlpsFixture.start(demDelay: const Duration(seconds: 2));
-      final (map, ground) = await pumpTerrainMap(tester);
+      final (map, ground) = await pumpTerrainMap(
+        tester,
+        demDelay: const Duration(seconds: 2),
+      );
       final shown = ground.toScreen(map.controller.camera!.center);
       expect((shown - map.center).distance, lessThan(_tolerance));
     }, skip: kIsWeb);
@@ -569,6 +576,7 @@ void runTests() {
     testWidgets('the terrain conversions are the plain ones without one', (
       tester,
     ) async {
+      await startFixture();
       final map = await pumpMap(tester, options: terrainOptions());
       await map.waitForLatestFrame();
       for (final offset in groundPoints) {
