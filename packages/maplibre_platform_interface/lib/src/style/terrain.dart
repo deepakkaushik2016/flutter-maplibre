@@ -55,7 +55,9 @@ enum TerrainLoadMode {
   balanced,
 
   /// Builds the fewest new terrain tiles a frame, and keeps the fewest: the
-  /// smoothest on a weak GPU, and the shortest view distance.
+  /// smoothest on a weak GPU, and the shortest view distance. It also drapes
+  /// the map over the terrain at 512 pixels a tile, so draped lines look
+  /// softer close up.
   performance,
 }
 

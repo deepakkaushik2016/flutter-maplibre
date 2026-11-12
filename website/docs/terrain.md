@@ -53,11 +53,16 @@ await style.setSky(
 ```
 
 Members left out take their style spec defaults, and `setSky(null)`
-removes the sky. `fogGroundBlend: 1` turns the fog off. The horizon is on
-screen only at a steep pitch, about 70° and more, so raise
-`MapOptions.maxPitch` (up to 85) to see the sky. `atmosphereBlend` applies
+removes the sky. Blends outside 0 to 1 are clamped to that range.
+`fogGroundBlend: 1` turns the fog off. The horizon is on screen only at a
+steep pitch, from about 69° on a phone-shaped view, so raise
+`MapOptions.maxPitch` (up to 85) to see the sky. The fog fades the ground of
+a terrain only above a pitch of 60°, and in full from 70°, on web and native
+alike. Above the horizon, a terrain style without a sky shows its background
+color on native and a transparent canvas on web. `atmosphereBlend` applies
 only on web, with the globe projection. Loading a new style replaces the
-sky with that style's.
+sky with that style's. Unlike `setTerrain`, which waits for a style that is
+loading, `setSky` fails with a `StateError` while a new style loads.
 
 ## Height of the ground
 
@@ -112,6 +117,9 @@ terrain for loading speed. It applies to every style of the map:
 | `quality`     | The default. Builds every revealed tile at once; the sharpest.          |
 | `balanced`    | Spreads new tiles over frames and keeps fewer of them.                  |
 | `performance` | Builds the fewest tiles a frame; smoothest on a weak GPU, shortest view |
+
+`performance` also drapes the map over the terrain at 512 pixels a tile,
+so draped lines look softer close up.
 
 maplibre-gl-js has no load modes, so on web it does nothing.
 

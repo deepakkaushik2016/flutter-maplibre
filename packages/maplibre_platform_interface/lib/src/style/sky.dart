@@ -6,9 +6,13 @@ import 'package:maplibre_platform_interface/src/style/expressions/expression_jso
 /// The sky of a style: the color above the horizon, and the fog that fades
 /// the distant ground into it.
 ///
-/// The sky shows only where the horizon is on screen, at a pitch of about
-/// 70 degrees or more, above the default [MapOptions.maxPitch] of 60. Set it
-/// with [StyleController.setSky].
+/// The sky shows only while the horizon is on screen: on a phone-shaped
+/// view, from a pitch of about 69 degrees, above the default
+/// [MapOptions.maxPitch] of 60. The fog fades the ground of a 3D terrain
+/// only above a pitch of 60 degrees and in full from 70 degrees, on web and
+/// native alike. Set it with [StyleController.setSky].
+///
+/// The blends are clamped to the range from 0 to 1, on web and native alike.
 ///
 /// https://maplibre.org/maplibre-style-spec/sky/
 @immutable
@@ -22,22 +26,7 @@ class Sky {
     this.horizonFogBlend = 0.8,
     this.skyHorizonBlend = 0.8,
     this.atmosphereBlend = 0.8,
-  }) : assert(
-         fogGroundBlend >= 0 && fogGroundBlend <= 1,
-         'fogGroundBlend must be between 0 and 1',
-       ),
-       assert(
-         horizonFogBlend >= 0 && horizonFogBlend <= 1,
-         'horizonFogBlend must be between 0 and 1',
-       ),
-       assert(
-         skyHorizonBlend >= 0 && skyHorizonBlend <= 1,
-         'skyHorizonBlend must be between 0 and 1',
-       ),
-       assert(
-         atmosphereBlend >= 0 && atmosphereBlend <= 1,
-         'atmosphereBlend must be between 0 and 1',
-       );
+  });
 
   /// The color of the sky at the top of the screen.
   final Color skyColor;
@@ -49,7 +38,8 @@ class Sky {
   final Color fogColor;
 
   /// Where the fog starts on the ground, from 0 at the camera to 1 at the
-  /// horizon. 1 turns the fog off.
+  /// horizon. 1 turns the fog off. The fog shows only on a 3D terrain viewed
+  /// at a pitch above 60 degrees, and in full from 70 degrees.
   final double fogGroundBlend;
 
   /// How far the fog color reaches up into the sky at the horizon, from 0 to
@@ -63,15 +53,16 @@ class Sky {
   /// web, with [MapProjection.globe].
   final double atmosphereBlend;
 
-  /// The sky as a style spec sky object.
+  /// The sky as a style spec sky object, with each blend clamped to the
+  /// range from 0 to 1, as native clamps them and web would reject them.
   Map<String, Object?> toJson() => {
     'sky-color': cssColorOf(skyColor),
     'horizon-color': cssColorOf(horizonColor),
     'fog-color': cssColorOf(fogColor),
-    'fog-ground-blend': fogGroundBlend,
-    'horizon-fog-blend': horizonFogBlend,
-    'sky-horizon-blend': skyHorizonBlend,
-    'atmosphere-blend': atmosphereBlend,
+    'fog-ground-blend': fogGroundBlend.clamp(0.0, 1.0),
+    'horizon-fog-blend': horizonFogBlend.clamp(0.0, 1.0),
+    'sky-horizon-blend': skyHorizonBlend.clamp(0.0, 1.0),
+    'atmosphere-blend': atmosphereBlend.clamp(0.0, 1.0),
   };
 
   @override

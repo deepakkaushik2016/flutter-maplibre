@@ -51,9 +51,22 @@ void main() {
       expect(_sky(), isNot(_sky(fog: 1)));
     });
 
-    test('asserts blends between 0 and 1', () {
-      expect(() => Sky(fogGroundBlend: -0.1), throwsA(isA<AssertionError>()));
-      expect(() => Sky(atmosphereBlend: 1.1), throwsA(isA<AssertionError>()));
+    test('clamps blends between 0 and 1', () {
+      const sky = Sky(
+        fogGroundBlend: -0.1,
+        horizonFogBlend: 1.5,
+        skyHorizonBlend: -2,
+        atmosphereBlend: 1.1,
+      );
+      expect(sky.toJson(), {
+        'sky-color': '#88c6fc',
+        'horizon-color': '#ffffff',
+        'fog-color': '#ffffff',
+        'fog-ground-blend': 0.0,
+        'horizon-fog-blend': 1.0,
+        'sky-horizon-blend': 0.0,
+        'atmosphere-blend': 1.0,
+      });
     });
   });
 }

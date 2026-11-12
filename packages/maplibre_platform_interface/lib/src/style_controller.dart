@@ -292,8 +292,9 @@ abstract class StyleController {
   /// only on web, with [MapProjection.globe].
   ///
   /// Fails with a [StateError] while a new style loads, which brings its own
-  /// sky, and once a newer style replaced this one. Set the sky of a new
-  /// style in [MapLibreMap.onStyleLoaded], or in the style document.
+  /// sky (unlike [setTerrain], which waits for the load), and once a newer
+  /// style replaced this one. Set the sky of a new style in
+  /// [MapLibreMap.onStyleLoaded], or in the style document.
   Future<void> setSky(Sky? sky);
 
   /// Sets the global state property [key] of the style to [value], which
