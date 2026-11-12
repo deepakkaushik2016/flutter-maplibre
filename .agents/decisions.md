@@ -8,7 +8,7 @@ Each entry: the decision, then why.
   for everything else.** One C API serves every native platform, so the
   per-platform packages (android, ios, webview) were removed.
 - **The C API comes from the `maplibre_native_ffi` package, by Git from the
-  terrain fork at the tag `terrain-3d-202611.8`, because no release on pub.dev
+  terrain fork at the tag `terrain-3d-202611.9`, because no release on pub.dev
   has the terrain API.** The build hook downloads the prebuilt C library of
   that release, checked against digests pinned at the tag. The tag has the
   pin committed, which a Git dependency needs. No submodule and no local C

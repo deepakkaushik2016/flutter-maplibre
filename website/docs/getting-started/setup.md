@@ -97,24 +97,24 @@ dependencies:
   maplibre:
     git:
       url: https://github.com/deepakkaushik2016/flutter-maplibre
-      ref: terrain-3d-202611.8
+      ref: terrain-3d-202611.9
       path: packages/maplibre
 
 dependency_overrides:
   maplibre_native:
     git:
       url: https://github.com/deepakkaushik2016/flutter-maplibre
-      ref: terrain-3d-202611.8
+      ref: terrain-3d-202611.9
       path: packages/maplibre_native
   maplibre_platform_interface:
     git:
       url: https://github.com/deepakkaushik2016/flutter-maplibre
-      ref: terrain-3d-202611.8
+      ref: terrain-3d-202611.9
       path: packages/maplibre_platform_interface
   maplibre_web:
     git:
       url: https://github.com/deepakkaushik2016/flutter-maplibre
-      ref: terrain-3d-202611.8
+      ref: terrain-3d-202611.9
       path: packages/maplibre_web
 
 hooks:
@@ -131,7 +131,7 @@ The development version needs a build of the MapLibre Native C library with
 the terrain API, which no release of `maplibre_native_ffi` on pub.dev has yet.
 `maplibre_native` therefore depends on the binding by Git, from the
 [terrain fork](https://github.com/deepakkaushik2016/maplibre-native-ffi) at the
-tag `terrain-3d-202611.8`.
+tag `terrain-3d-202611.9`.
 
 The build hook of the binding downloads the C library for each target and
 checks it against digests pinned at that tag. By default it looks on the
