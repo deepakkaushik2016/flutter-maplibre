@@ -109,8 +109,8 @@ as visible.
 
 To place many points on the ground, such as a trail, convert them in one
 call. The list holds one answer for each point, in order, with null where
-`toScreenLocationOnTerrain` would be null, and every answer comes from the
-same frame:
+`toScreenLocationOnTerrain` would be null and for a point with a NaN
+coordinate:
 
 ```dart
 final locations = await controller.toScreenLocationsOnTerrain(trail);
@@ -120,8 +120,17 @@ for (final (i, location) in locations.indexed) {
 }
 ```
 
-Not on web, the whole list is one query of the map's latest frame, much
-faster than a call for each point.
+The points go in parts of 400, so the map keeps drawing; while the camera
+moves, the parts of a longer list can come from different frames. On
+Android, iOS and macOS each part is one query of the map's latest frame; on
+web, a few gl-js calls for each point. Over 5,000 points of a trail it took
+100 to 133 ms on a Pixel 8 Pro, where calls one after the other take about
+15 ms for each 100 points, and 115 to 138 ms on web.
+
+Both conversions answer null until the map has drawn its terrain. Right
+after a terrain is set, such as when switching from 2D to 3D, the DEM tiles
+are still loading and every point is null, so convert once the map is idle
+with its terrain drawn.
 
 ## Load mode
 

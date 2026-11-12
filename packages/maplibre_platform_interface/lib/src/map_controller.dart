@@ -90,7 +90,9 @@ abstract interface class MapController {
   /// [toScreenLocation] finds, and [TerrainScreenLocation.occluded] is false.
   /// Returns null where no DEM tile that the map has loaded covers [lngLat],
   /// for a point behind the camera on native, and before the map has drawn
-  /// its first frame.
+  /// its first frame. Right after a terrain is set, such as when an app
+  /// switches from 2D to 3D, its DEM tiles have not loaded, so query once the
+  /// map is idle with its terrain drawn.
   ///
   /// On web, maplibre-gl-js has no public occlusion test, so a point counts
   /// as hidden when the ground drawn at its screen location is higher than
@@ -112,15 +114,23 @@ abstract interface class MapController {
   /// ground.
   ///
   /// The list holds one answer for each point, in the order of [lngLats]:
-  /// null where [toScreenLocationOnTerrain] answers null for the point, such
-  /// as where no loaded DEM tile covers it. An empty list answers an empty
-  /// list. The answers come from the same frame, also while the camera
-  /// moves, as the caveats of [toScreenLocationOnTerrain] describe for each
-  /// platform.
+  /// null where [toScreenLocationOnTerrain] answers null for the point, and
+  /// null for a point with a NaN coordinate, which costs only its own
+  /// answer. An empty list answers an empty list.
   ///
-  /// On every platform but web it is one query of the map's latest frame
-  /// for all the points, which is much faster than a call for each. On web
-  /// it makes the calls into maplibre-gl-js that each point needs.
+  /// Null also means that the map has no frame or no terrain to read yet.
+  /// Right after a terrain is set, such as when an app switches from 2D to
+  /// 3D, the DEM tiles have not loaded and every point is null. Query once
+  /// the map is idle with its terrain drawn.
+  ///
+  /// The points go in parts of 400, with a turn of the event loop between
+  /// them so the map keeps drawing, so the answers for more than 400 points
+  /// can come from more than one frame while the camera moves. On Android,
+  /// iOS and macOS each part is one query of the map's latest frame; on web,
+  /// a few calls into maplibre-gl-js for each point. Measured over 5,000
+  /// points of a trail: 100 to 133 ms on a Pixel 8 Pro, where the calls one
+  /// after the other take about 15 ms for each 100 points, and 115 to 138 ms
+  /// on web in Chrome on a Mac.
   Future<List<TerrainScreenLocation?>> toScreenLocationsOnTerrain(
     List<Geographic> lngLats,
   );

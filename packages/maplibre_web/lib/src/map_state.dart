@@ -796,7 +796,12 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   @override
   Future<List<TerrainScreenLocation?>> toScreenLocationsOnTerrain(
     List<Geographic> lngLats,
-  ) async => [for (final lngLat in lngLats) _screenLocationOnTerrain(lngLat)];
+  ) => queryConvertibleLngLats(
+    lngLats,
+    (points) async => [
+      for (final point in points) _screenLocationOnTerrain(point),
+    ],
+  );
 
   @override
   Future<double?> queryTerrainElevation(Geographic point) async =>

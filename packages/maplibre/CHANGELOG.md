@@ -73,8 +73,12 @@
 - 3D terrain: `MapController.toScreenLocationsOnTerrain` finds where the
   map draws a list of points on the ground, such as a trail, in one call:
   one answer for each point, in order, null where
-  `toScreenLocationOnTerrain` is null, all from the same frame. Not on web
-  it is one query for the whole list, much faster than a call for each.
+  `toScreenLocationOnTerrain` is null or a coordinate is NaN. It goes in
+  parts of 400 points so the map keeps drawing. On Android, iOS and macOS
+  each part is one query; on web, a few gl-js calls for each point. 5,000
+  points took 100 to 133 ms on a Pixel 8 Pro, against about 15 ms for each
+  100 points with `toScreenLocationOnTerrain` one after the other, and 115
+  to 138 ms on web.
 - 3D terrain over a sparse raster-dem tileset, one that answers the tiles it
   does not have with `204 No Content` or a 404: such a tile is drawn and
   queried from its nearest ancestor with data, on web as on native.

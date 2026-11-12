@@ -903,26 +903,40 @@ Each entry: the decision, then why.
   when the ground drawn at its screen location is more than 2 m higher: a
   line of sight that comes down onto the ground meets the higher of two
   points on it first. Two to four gl-js calls per conversion.
-- **`toScreenLocationsOnTerrain` is one query for a whole list, and
+- **`toScreenLocationsOnTerrain` converts a list in parts of 400, and
   concurrent single calls stay independent.** An app placing a trail on the
-  ground (98 points) asked for it after a report that `Future.wait` over
-  `toScreenLocationOnTerrain` answered null for every point on an Android
-  phone. Nothing per call is shared on native: each call is its own C
-  completion, named by its own token in the binding's delivery queue, and
-  its own work item on the session's driver queue, which runs them in
-  order. 100 concurrent calls answered exactly as the same calls one by one
-  on macOS, the iOS simulator, a Pixel 8 Pro (debug and profile), an arm64
-  Android emulator and web (`terrain_query_test.dart`), and on the emulator
-  also while the camera flew; the phone's report did not reproduce. The list call needed a C API addition,
-  `mln_render_session_query_pixels_for_lat_lngs`, which answers every point
-  in one driver work item, so all come from the same frame and the session
-  is validated once; each `mln_terrain_screen_point_result` carries
-  `found`, which maps to null. Concurrent single calls can answer from
-  different frames while the camera moves, because frames render between
-  their work items; the list call cannot. An empty list answers at once
-  without a query. Web answers the points synchronously in one loop, with
-  the single call's two to four gl-js calls each, so no frame comes
-  between them either.
+  ground (98 points) asked for it. Its earlier report of `Future.wait` over
+  `toScreenLocationOnTerrain` answering null for every point came from the
+  app's timing: it queried right after switching from 2D to 3D, before the
+  DEM tiles loaded. Nothing per call is shared on native: each call is its
+  own C completion, named by its own token in the binding's delivery queue,
+  and its own work item on the session's driver queue, which runs them in
+  order. `terrain_query_test.dart` checks that 100 concurrent calls answer
+  as the same calls one by one, on every platform.
+- **The list call needed a C API addition,
+  `mln_render_session_query_pixels_for_lat_lngs`.** It answers its points
+  in one driver work item, from one frame, with the session checked once.
+  Each `mln_terrain_screen_point_result` carries `found`, which maps to
+  null. The C call rejects the whole submission for one coordinate that
+  is out of range, so the plugin (`queryConvertibleLngLats` in the platform
+  interface's `utils.dart`) leaves such points out and answers null for
+  them on every platform; `Geographic` clamps latitudes and wraps
+  longitudes, so only NaN gets there.
+- **Parts of 400 points keep the map drawing.** Measured over 5,000 points
+  of the synthetic ridge in profile builds:
+  - Pixel 8 Pro, one query: 61 to 100 ms on the render thread, during
+    which no frame renders; 500 points, 9 to 13 ms.
+  - Web in Chrome on a Mac, one loop: 84 to 89 ms on the main thread;
+    500 points, 7 ms.
+  - So the plugin queries 400 at a time, with a turn of the event loop
+    between parts: 5,000 points take 100 to 133 ms on the Pixel and 115 to
+    138 ms on web, and the UI isolate's longest block on the Pixel is
+    under 7 ms.
+  - The parts of a longer list can come from different frames while the
+    camera moves.
+  - For comparison on the Pixel: 5,000 concurrent single calls took 80 to
+    122 ms and held the UI isolate for 60 to 85 ms while submitting them;
+    single calls one after the other take about 15 ms for each 100 points.
 - **On web, Flutter is the only hit-tester.** The gl-js map is created with
   `interactive: false` and its container has `pointer-events: none`, so the
   browser hands every pointer to Flutter, and widgets over the map no longer

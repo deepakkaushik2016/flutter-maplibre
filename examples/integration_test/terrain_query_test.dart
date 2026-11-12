@@ -209,6 +209,51 @@ void runTests() {
       expect(_same(batch[0], batch[5]), isTrue);
     });
 
+    testWidgets('toScreenLocationsOnTerrain answers a 5000-point trail', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      final trail = [
+        for (var i = 0; i < 5000; i++)
+          _fromCrest(-8 + 18 * i / 4999, 5 * sin(i / 300)),
+      ];
+      final watch = Stopwatch()..start();
+      final batch = await map.controller.toScreenLocationsOnTerrain(trail);
+      debugPrint('5000 points in ${watch.elapsedMilliseconds} ms');
+      final expected = await Future.wait([
+        for (final point in trail)
+          map.controller.toScreenLocationOnTerrain(point),
+      ]);
+      expect(expected.nonNulls, isNotEmpty);
+      expectSame(trail, batch, expected);
+    });
+
+    testWidgets('toScreenLocationsOnTerrain answers null for bad points', (
+      tester,
+    ) async {
+      final map = await pumpTerrainMap(tester);
+      final good = [_fromCrest(0, 0), _fromCrest(8, 0), _fromCrest(-2, 1)];
+      // A bad first point, a NaN latitude, a NaN longitude and an infinite
+      // one, which Geographic turns into NaN, among the good ones.
+      final points = [
+        const Geographic(lon: alpsLng, lat: double.nan),
+        good[0],
+        const Geographic(lon: alpsLng, lat: double.nan),
+        good[1],
+        const Geographic(lon: double.nan, lat: alpsLat),
+        const Geographic(lon: double.infinity, lat: alpsLat),
+        good[2],
+      ];
+      final batch = await map.controller.toScreenLocationsOnTerrain(points);
+      final expected = await oneByOne(map, good);
+      expect(batch, hasLength(points.length));
+      for (final i in const [0, 2, 4, 5]) {
+        expect(batch[i], isNull, reason: '${points[i]}');
+      }
+      expectSame(good, [batch[1], batch[3], batch[6]], expected);
+      expect(batch[1], isNotNull);
+    });
+
     testWidgets('toScreenLocationsOnTerrain is the plain one without one', (
       tester,
     ) async {
