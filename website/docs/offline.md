@@ -138,7 +138,7 @@ request can reach the network.
 
 `StillImageRenderer` draws a map into a PNG without showing one, for example
 to share it. On web, images are drawn one at a time, so a request waits for
-the ones before it, and that wait counts towards its `timeout`.
+the ones before it; its `timeout` starts with its turn.
 
 ```dart
 final renderer = await StillImageRenderer.createInstance();

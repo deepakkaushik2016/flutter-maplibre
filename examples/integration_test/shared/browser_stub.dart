@@ -6,6 +6,10 @@ void clearResourceTimings() {}
 /// How many requests the browser made for [url].
 int resourceRequests(String url) => 0;
 
+/// The URLs of the requests the browser made whose URL starts with
+/// [prefix].
+List<String> resourcesUnder(String prefix) => const [];
+
 /// Answers maplibre-gl-js requests for `<scheme>://…` URLs with the JSON
 /// that [respond] completes with.
 void addJsonProtocol(
@@ -23,7 +27,8 @@ void addNotFoundProtocol(
 
 /// Answers maplibre-gl-js requests for `<scheme>://…` URLs with what
 /// [respond] completes with: JSON text for a JSON request, bytes for a tile
-/// or an image, or null for the error of a 404 Not Found.
+/// or an image, an HTTP status for the error of that status, or null for the
+/// error of a 404 Not Found.
 void addFixtureProtocol(
   String scheme,
   Future<Object?> Function(String url) respond,

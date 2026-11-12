@@ -693,18 +693,34 @@ Each entry: the decision, then why.
   (then the camera's `elevation`); the terrain is set once the style loads,
   and the canvas is read with `toBlob` at the first `idle` after it. It routes
   raster-dem tiles through the sparse-dem protocol and applies
-  `MapLibreNetwork` as a map does, and any `error` event fails the image, as
-  native fails one whose resource failed (gl-js reports no error for a
-  404 tile). Requests queue so that at most one such map, and one more WebGL
-  context than the page's maps, lives at a time: browsers drop the oldest
-  context past a limit of their own, and `map.remove()` releases it. A
-  request's timeout counts from the call, so it includes the wait. A camera
-  under the terrain leaves the image clear, where native shows the style's
-  background, since gl-js draws the background onto the terrain.
-  Integration tests on web only report `testWidgets` failures (the binding
-  records results in `runTest`); a failing `test` or `setUp` passes
-  silently, so `still_image_test.dart` uses `testWidgets` and checks
-  `createInstance` outside its group's `setUp`.
+  `MapLibreNetwork` as a map does, with the same repaint after an empty tile,
+  without which `idle` never comes when an empty tile is the last to load.
+  - Requests queue so that at most one such map, and one more WebGL context
+    than the page's maps, lives at a time: browsers drop the oldest context
+    past a limit of their own, and `map.remove()` releases it. As on native,
+    a request's timeout counts from its turn, not its call; `dispose` also
+    fails the requests that wait.
+  - Any `error` event fails the image, as native fails a still when any
+    resource fails: the style, a source's TileJSON (also of a source no
+    layer draws) or a tile (both platforms take a 404 tile as missing and
+    report no error). gl-js doesn't load a style with an error-level
+    validation message, so failing at once beats waiting for the timeout,
+    and it only logs warnings. A paint property the spec lacks is such an
+    error in gl-js, while native drops the layer that has it; keys outside
+    `paint` and `layout` that the spec lacks pass on both.
+  - gl-js clears the canvas transparent and, over a terrain, draws the
+    background onto the ground only, so above the ground of a steep camera
+    without a sky, or under the ground, its canvas stays clear. Native clears
+    with the bottom layer's color when it is a visible background without a
+    pattern (`getSolidBackground`), so the web image is the canvas drawn over
+    that color, read from gl-js's evaluated properties of the layer
+    (`getLayer(id).paint`).
+  - Integration tests on web only report `testWidgets` failures (the binding
+    records results in `runTest`); a failing `test` or `setUp` passes
+    silently, so `still_image_test.dart` uses `testWidgets` and checks
+    `createInstance` outside its group's `setUp`. The browser keeps 250
+    resource timing entries, which the debug app's own scripts fill, so a
+    test that counts requests clears them first.
 
 ## Gestures
 

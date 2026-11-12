@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre/maplibre.dart';
 
+import 'shared/alps_fixture.dart';
 import 'shared/browser.dart';
 import 'shared/still_png.dart';
 
@@ -19,10 +20,6 @@ void main() {
 
 const _ground = [255, 0, 0, 255];
 const _background = [0, 0, 255, 255];
-
-/// What a camera under the terrain shows: the style's background. On web,
-/// where the background is drawn onto the terrain, the image stays clear.
-const List<int> _underground = kIsWeb ? [0, 0, 0, 0] : _background;
 
 /// A flank of Everest: the camera's center at sea level would be under it.
 const _everest = CameraUpdate.position(
@@ -78,6 +75,20 @@ class _Server {
 
   /// Whether the DEM has no tiles at its highest zoom, as a sparse tileset.
   bool sparse = false;
+
+  /// Whether the style and its raster layer have keys that the style spec
+  /// doesn't know.
+  bool unknownKeys = false;
+
+  /// Whether the style has a source, which no layer draws, whose TileJSON
+  /// is missing.
+  bool unusedSource = false;
+
+  /// Whether every raster tile fails with 500 Internal Server Error.
+  bool failRaster = false;
+
+  /// Holds the answers to `?held` requests for the style until it completes.
+  final styleHeld = Completer<void>();
   int styleRequests = 0;
 
   /// The requests for sprites and glyphs that reached the server.
@@ -103,21 +114,39 @@ class _Server {
       return null;
     } else if (path.startsWith('/dem/13/') && sparse) {
       return null;
+    } else if (path == '/missing.json') {
+      return null;
+    } else if (path.startsWith('/raster/') && failRaster) {
+      return _failure;
     }
     return path.startsWith('/dem/') ? _dem : _raster;
   }
 
-  Future<Object?> _respond(String url) async => _answer(Uri.parse(url).path);
+  /// The answer of a request that fails with 500 Internal Server Error.
+  static const _failure = #failure;
+
+  Future<Object?> _respond(String url) async =>
+      switch (await _answerAfterHold(Uri.parse(url))) {
+        _failure => HttpStatus.internalServerError,
+        final answer => answer,
+      };
+
+  Future<Object?> _answerAfterHold(Uri uri) async {
+    if (uri.query == 'held') await styleHeld.future;
+    return _answer(uri.path);
+  }
 
   Future<void> _serve(HttpRequest request) async {
     final response = request.response;
-    switch (_answer(request.uri.path)) {
+    switch (await _answerAfterHold(request.uri)) {
       case final String json:
         response.write(json);
       case final Uint8List png:
         response
           ..headers.contentType = ContentType('image', 'png')
           ..add(png);
+      case _failure:
+        response.statusCode = HttpStatus.internalServerError;
       default:
         response.statusCode = HttpStatus.notFound;
     }
@@ -126,7 +155,10 @@ class _Server {
 
   String get style => jsonEncode({
     'version': 8,
+    if (unknownKeys) 'nonsense': true,
     'sources': {
+      if (unusedSource)
+        'unused': {'type': 'raster', 'url': '$_url/missing.json'},
       'dem': {
         'type': 'raster-dem',
         'tiles': ['$_url/dem/{z}/{x}/{y}.png'],
@@ -146,7 +178,12 @@ class _Server {
         'type': 'background',
         'paint': {'background-color': '#0000ff'},
       },
-      {'id': 'ground', 'type': 'raster', 'source': 'ground'},
+      {
+        'id': 'ground',
+        'type': 'raster',
+        'source': 'ground',
+        if (unknownKeys) 'nonsense': true,
+      },
     ],
   });
 
@@ -251,7 +288,7 @@ void runTests() {
     testWidgets('a center height the caller gives replaces the clamp', (
       tester,
     ) async {
-      expect((await render(centerAltitude: 0)).colorAt(64, 64), _underground);
+      expect((await render(centerAltitude: 0)).colorAt(64, 64), _background);
       expect((await render(centerAltitude: 5400)).colorAt(64, 64), _ground);
     });
 
@@ -276,6 +313,93 @@ void runTests() {
       );
       expect(sparse.colorAt(64, 64), _ground);
       expect(sparse.differenceFrom(dense), lessThan(0.01));
+    });
+
+    testWidgets('terrain over a server with tiles missing draws as over '
+        'all tiles', (tester) async {
+      // A server of the synthetic DEM, which has only zoom 10 tiles. In the
+      // browser the app's own server answers, so its tiles take the routing
+      // of raster-dem tiles over http.
+      final alps = await AlpsFixture.start();
+      addTearDown(alps.close);
+      // The browser keeps 250 entries, which the app's own scripts fill.
+      clearResourceTimings();
+      Future<StillPixels> renderAlps({required int maxzoom}) async {
+        final style = alps.style();
+        final sources = style['sources']! as Map<String, Object?>;
+        final dem = {...sources['alps']! as Map<String, Object?>};
+        dem['maxzoom'] = maxzoom;
+        style['sources'] = {
+          'alps': dem,
+          // Relief to compare, from a source of its own.
+          'shade': dem,
+        };
+        style['layers'] = [
+          ...style['layers']! as List<Object?>,
+          {'id': 'shade', 'type': 'hillshade', 'source': 'shade'},
+        ];
+        return decodeStill(
+          await renderer.render(
+            style: MapStyle.json(jsonEncode(style)),
+            size: _size,
+            camera: alpsCamera,
+            terrain: const Terrain(sourceId: 'alps'),
+            timeout: const Duration(seconds: 20),
+          ),
+        );
+      }
+
+      final all = await renderAlps(maxzoom: alpsDemZoom);
+      // Zoom 11 is missing: each tile is drawn from its zoom 10 parent.
+      final missing = await renderAlps(maxzoom: alpsDemZoom + 1);
+      expect(missing.differenceFrom(all), lessThan(0.01));
+      if (kIsWeb) {
+        // The missing tiles were asked of the server.
+        final requested = resourcesUnder(
+          Uri.base.resolve('assets/assets/terrain/alps/').toString(),
+        );
+        expect(
+          requested.where((url) => url.contains('/alps/${alpsDemZoom + 1}/')),
+          isNotEmpty,
+          reason: 'requested: $requested',
+        );
+      }
+    });
+
+    testWidgets('a steep camera without a sky shows the background above '
+        'the ground', (tester) async {
+      final image = await decodeStill(
+        await renderer.render(
+          style: MapStyle.url(server.styleUrl),
+          size: _size,
+          camera: const CameraUpdate.position(
+            center: Geographic(lon: 86.925, lat: 27.988),
+            zoom: 13.5,
+            pitch: 85,
+          ),
+          terrain: _terrain,
+          timeout: const Duration(seconds: 20),
+        ),
+      );
+      expect(image.colorAt(64, 1), _background);
+      expect(image.colorAt(64, 127), _ground);
+    });
+
+    testWidgets('a style with keys the spec lacks still draws', (tester) async {
+      server.unknownKeys = true;
+      expect((await render()).colorAt(64, 64), _ground);
+    });
+
+    testWidgets('a source whose TileJSON fails fails the image', (
+      tester,
+    ) async {
+      server.unusedSource = true;
+      await expectLater(render(), throwsA(isA<StillImageException>()));
+    });
+
+    testWidgets('a tile that fails fails the image', (tester) async {
+      server.failRaster = true;
+      await expectLater(render(), throwsA(isA<StillImageException>()));
     });
 
     testWidgets('a style missing offline fails instead of hanging', (
@@ -343,6 +467,55 @@ void runTests() {
         expect(maps, 1);
         expect(countElements('.maplibre-still-image'), 0);
       }
+    });
+
+    testWidgets('the timeout counts from when a request starts', (
+      tester,
+    ) async {
+      // In the browser, the second request waits for the first.
+      final held = renderer.render(
+        style: MapStyle.url('${server.styleUrl}?held'),
+        size: _size,
+        camera: _everest,
+        terrain: _terrain,
+      );
+      final next = renderer.render(
+        style: MapStyle.url(server.styleUrl),
+        size: _size,
+        camera: _everest,
+        terrain: _terrain,
+        timeout: const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(const Duration(seconds: 6));
+      server.styleHeld.complete();
+      expect((await decodeStill(await held)).colorAt(64, 64), _ground);
+      expect((await decodeStill(await next)).colorAt(64, 64), _ground);
+    });
+
+    testWidgets('dispose fails a request that waits for its turn', (
+      tester,
+    ) async {
+      final held = renderer.render(
+        style: MapStyle.url('${server.styleUrl}?held'),
+        size: _size,
+        camera: _everest,
+      );
+      final next = renderer.render(
+        style: MapStyle.url(server.styleUrl),
+        size: _size,
+        camera: _everest,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      renderer.dispose();
+      await expectLater(held, throwsA(isA<StillImageException>()));
+      if (kIsWeb) {
+        await expectLater(next, throwsA(isA<StillImageException>()));
+      } else {
+        // Only the browser queues requests: elsewhere the second one may
+        // have finished before the dispose.
+        await next.then<void>((_) {}, onError: (Object _) {});
+      }
+      server.styleHeld.complete();
     });
 
     testWidgets('dispose during a request fails it', (tester) async {

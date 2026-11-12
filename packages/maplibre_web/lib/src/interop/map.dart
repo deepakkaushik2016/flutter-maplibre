@@ -199,6 +199,16 @@ extension type JsMap._(Camera _) implements Camera {
   /// Get the loaded style.
   external StyleSpecification? getStyle();
 
+  /// The ids of the style's layers, bottom first.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#getlayersorder
+  external JSArray<JSString> getLayersOrder();
+
+  /// The style layer [id] with its evaluated properties, or null.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#getlayer
+  external JSObject? getLayer(String id);
+
   /// Returns an array of MapGeoJSONFeature objects representing visible
   /// features that satisfy the query parameters.
   external JSArray<MapGeoJSONFeature> queryRenderedFeatures(

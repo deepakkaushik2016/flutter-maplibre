@@ -14,6 +14,21 @@ int resourceRequests(String url) => _performance
     .callMethod<JSArray<JSAny?>>('getEntriesByName'.toJS, url.toJS)
     .length;
 
+/// The URLs of the requests the browser made whose URL starts with
+/// [prefix].
+List<String> resourcesUnder(String prefix) => [
+  for (final entry
+      in _performance
+          .callMethod<JSArray<JSObject>>(
+            'getEntriesByType'.toJS,
+            'resource'.toJS,
+          )
+          .toDart)
+    if (entry.getProperty<JSString>('name'.toJS).toDart case final name
+        when name.startsWith(prefix))
+      name,
+];
+
 /// Answers maplibre-gl-js requests for `<scheme>://…` URLs with the JSON
 /// that [respond] completes with.
 void addJsonProtocol(
@@ -74,7 +89,8 @@ void addNotFoundProtocol(
 
 /// Answers maplibre-gl-js requests for `<scheme>://…` URLs with what
 /// [respond] completes with: JSON text for a JSON request, bytes for a tile
-/// or an image, or null for the error of a 404 Not Found.
+/// or an image, an HTTP status for the error of that status, or null for the
+/// error of a 404 Not Found.
 void addFixtureProtocol(
   String scheme,
   Future<Object?> Function(String url) respond,
@@ -92,10 +108,11 @@ void addFixtureProtocol(
       return promise.callAsConstructor<JSObject>(
         ((JSFunction resolve, JSFunction reject) {
           respond(url).then((body) {
-            if (body == null) {
+            if (body == null || body is int) {
+              final status = body as int? ?? 404;
               final error = ajaxError.callAsConstructor<JSObject>(
-                404.toJS,
-                'Not Found'.toJS,
+                status.toJS,
+                (status == 404 ? 'Not Found' : 'Error').toJS,
                 url.toJS,
                 blob.callAsConstructor<JSObject>(JSArray<JSAny?>()),
               );

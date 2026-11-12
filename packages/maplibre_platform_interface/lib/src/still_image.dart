@@ -27,7 +27,8 @@ import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 /// needs is missing.
 ///
 /// On web, the network status does nothing, and images are drawn one at a
-/// time: a request waits for the ones before it, within its timeout.
+/// time: a request waits for the ones before it, and its timeout starts
+/// with its turn.
 ///
 /// {@category Offline}
 abstract interface class StillImageRenderer {
