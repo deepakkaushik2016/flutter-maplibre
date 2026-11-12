@@ -212,3 +212,35 @@ const _readFrameScript = '''
   window.__maplibreSeen = () => last !== null;
 })();
 ''';
+
+/// Hides the evaluated properties (`paint`) of every layer that
+/// maplibre-gl-js's `Map.getLayer` returns, as a release of gl-js that
+/// reshaped its internals would, until the returned function restores them.
+void Function() hideLayerPaint() {
+  final restore = globalContext.callMethod<JSFunction>(
+    'eval'.toJS,
+    _hideLayerPaintScript.toJS,
+  );
+  // The analyzer asks for a tear-off, which the JS interop disallows.
+  // ignore: unnecessary_lambdas
+  return () => restore.callAsFunction();
+}
+
+const _hideLayerPaintScript = '''
+(() => {
+  const proto = maplibregl.Map.prototype;
+  const getLayer = proto.getLayer;
+  proto.getLayer = function (id) {
+    const layer = getLayer.call(this, id);
+    if (!layer) return layer;
+    return new Proxy(layer, {
+      get(target, key) {
+        if (key === 'paint') throw new TypeError('paint is hidden');
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  };
+  return () => { proto.getLayer = getLayer; };
+})()
+''';

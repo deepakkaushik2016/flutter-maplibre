@@ -714,13 +714,17 @@ Each entry: the decision, then why.
     with the bottom layer's color when it is a visible background without a
     pattern (`getSolidBackground`), so the web image is the canvas drawn over
     that color, read from gl-js's evaluated properties of the layer
-    (`getLayer(id).paint`).
+    (`getLayer(id).paint`). Those are gl-js internals, so any error while
+    reading them draws the image without the color (the transparent canvas)
+    rather than failing it with a raw JavaScript error;
+    `still_image_test.dart` hides `paint` to check that.
   - Integration tests on web only report `testWidgets` failures (the binding
     records results in `runTest`); a failing `test` or `setUp` passes
-    silently, so `still_image_test.dart` uses `testWidgets` and checks
-    `createInstance` outside its group's `setUp`. The browser keeps 250
-    resource timing entries, which the debug app's own scripts fill, so a
-    test that counts requests clears them first.
+    silently, so `still_image_test.dart` and `sky_test.dart` use
+    `testWidgets` and start their fixtures inside each test, not in a
+    `setUp`. The browser keeps 250 resource timing entries, which the debug
+    app's own scripts fill, so a test that counts requests clears them
+    first.
 
 ## Gestures
 

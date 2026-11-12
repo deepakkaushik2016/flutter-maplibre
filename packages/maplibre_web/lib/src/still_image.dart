@@ -262,7 +262,22 @@ final class StillImageRendererWeb implements StillImageRenderer {
   /// The CSS color and opacity of the bottom layer of [map]'s style when it
   /// is a visible background without a pattern, from gl-js's evaluated
   /// properties of the layer.
+  ///
+  /// Those properties are internals of gl-js, not its API: if a release of
+  /// gl-js reshapes them, the image is drawn without the color, as the
+  /// transparent canvas, instead of failing with a JavaScript error.
   static ({String color, double opacity})? _solidBackground(interop.JsMap map) {
+    try {
+      return _evaluatedBackground(map);
+    } catch (_) {
+      // A JavaScript error is not an Exception, so every error is caught.
+      return null;
+    }
+  }
+
+  static ({String color, double opacity})? _evaluatedBackground(
+    interop.JsMap map,
+  ) {
     final order = map.getLayersOrder().toDart;
     if (order.isEmpty) return null;
     final layer = map.getLayer(order.first.toDart);

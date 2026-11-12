@@ -164,12 +164,9 @@ bool _fogged(List<int> pixel) =>
 
 void runTests() {
   group('sky', () {
+    // Started by each test rather than in a setUp: on web, a failure in a
+    // setUp is not reported, and the test would pass without running.
     late AlpsFixture fixture;
-    setUp(() async {
-      clearResourceTimings();
-      fixture = await AlpsFixture.start();
-    });
-    tearDown(() async => fixture.close());
 
     /// The fixture's style with a background of [color].
     Map<String, Object?> style({String color = '#303030'}) {
@@ -190,8 +187,12 @@ void runTests() {
       maxPitch: 85,
     );
 
-    /// A map at [_camera] over the synthetic ridge with its terrain.
+    /// Starts the fixture, then pumps a map at [_camera] over the synthetic
+    /// ridge with its terrain.
     Future<TestMap> pumpSkyMap(WidgetTester tester) async {
+      clearResourceTimings();
+      fixture = await AlpsFixture.start();
+      addTearDown(fixture.close);
       final map = await pumpMap(tester, options: options(style()));
       await map.style.setTerrain(_terrain);
       await fixture.waitUntilSettled(map, GroundView(map));

@@ -254,17 +254,22 @@ void runTests() {
     late _Server server;
     late StillImageRenderer renderer;
 
-    setUp(() async {
+    /// A test that first starts [renderer] and [server]. Not in a setUp: on
+    /// web, a failure in a setUp is not reported, and the test would pass
+    /// without running.
+    void testStill(
+      String description,
+      Future<void> Function(WidgetTester tester) body, {
+      bool skip = false,
+    }) => testWidgets(description, (tester) async {
+      addTearDown(MapLibreNetwork.reset);
       // Loads maplibre-gl-js on web, which the server's protocol needs.
       renderer = await StillImageRenderer.createInstance();
+      addTearDown(renderer.dispose);
       server = await _Server.start();
-    });
-
-    tearDown(() async {
-      MapLibreNetwork.reset();
-      renderer.dispose();
-      await server.close();
-    });
+      addTearDown(server.close);
+      await body(tester);
+    }, skip: skip);
 
     Future<StillPixels> render({double? centerAltitude}) async => decodeStill(
       await renderer.render(
@@ -277,7 +282,7 @@ void runTests() {
       ),
     );
 
-    testWidgets('draws ground high above the camera, at any size', (
+    testStill('draws ground high above the camera, at any size', (
       tester,
     ) async {
       final image = await render();
@@ -285,14 +290,14 @@ void runTests() {
       expect(image.colorAt(64, 64), _ground);
     });
 
-    testWidgets('a center height the caller gives replaces the clamp', (
+    testStill('a center height the caller gives replaces the clamp', (
       tester,
     ) async {
       expect((await render(centerAltitude: 0)).colorAt(64, 64), _background);
       expect((await render(centerAltitude: 5400)).colorAt(64, 64), _ground);
     });
 
-    testWidgets('terrain over a sparse DEM draws as over a dense one', (
+    testStill('terrain over a sparse DEM draws as over a dense one', (
       tester,
     ) async {
       final dense = await render();
@@ -315,7 +320,7 @@ void runTests() {
       expect(sparse.differenceFrom(dense), lessThan(0.01));
     });
 
-    testWidgets('terrain over a server with tiles missing draws as over '
+    testStill('terrain over a server with tiles missing draws as over '
         'all tiles', (tester) async {
       // A server of the synthetic DEM, which has only zoom 10 tiles. In the
       // browser the app's own server answers, so its tiles take the routing
@@ -366,7 +371,7 @@ void runTests() {
       }
     });
 
-    testWidgets('a steep camera without a sky shows the background above '
+    testStill('a steep camera without a sky shows the background above '
         'the ground', (tester) async {
       final image = await decodeStill(
         await renderer.render(
@@ -385,24 +390,43 @@ void runTests() {
       expect(image.colorAt(64, 127), _ground);
     });
 
-    testWidgets('a style with keys the spec lacks still draws', (tester) async {
+    testStill('a background that gl-js internals no longer describe '
+        'leaves the sky clear instead of failing', (tester) async {
+      addTearDown(hideLayerPaint());
+      final image = await decodeStill(
+        await renderer.render(
+          style: MapStyle.url(server.styleUrl),
+          size: _size,
+          camera: const CameraUpdate.position(
+            center: Geographic(lon: 86.925, lat: 27.988),
+            zoom: 13.5,
+            pitch: 85,
+          ),
+          terrain: _terrain,
+          timeout: const Duration(seconds: 20),
+        ),
+      );
+      // Not drawn over the background's color: gl-js leaves it clear.
+      expect(image.colorAt(64, 1), [0, 0, 0, 0]);
+      expect(image.colorAt(64, 127), _ground);
+    }, skip: !kIsWeb);
+
+    testStill('a style with keys the spec lacks still draws', (tester) async {
       server.unknownKeys = true;
       expect((await render()).colorAt(64, 64), _ground);
     });
 
-    testWidgets('a source whose TileJSON fails fails the image', (
-      tester,
-    ) async {
+    testStill('a source whose TileJSON fails fails the image', (tester) async {
       server.unusedSource = true;
       await expectLater(render(), throwsA(isA<StillImageException>()));
     });
 
-    testWidgets('a tile that fails fails the image', (tester) async {
+    testStill('a tile that fails fails the image', (tester) async {
       server.failRaster = true;
       await expectLater(render(), throwsA(isA<StillImageException>()));
     });
 
-    testWidgets('a style missing offline fails instead of hanging', (
+    testStill('a style missing offline fails instead of hanging', (
       tester,
     ) async {
       MapLibreNetwork.status = NetworkStatus.offline;
@@ -418,7 +442,7 @@ void runTests() {
       expect(server.styleRequests, 0);
     }, skip: _offlineSkip);
 
-    testWidgets('a sprite missing offline fails instead of hanging', (
+    testStill('a sprite missing offline fails instead of hanging', (
       tester,
     ) async {
       MapLibreNetwork.status = NetworkStatus.offline;
@@ -434,7 +458,7 @@ void runTests() {
       expect(server.styleAssetRequests, 0);
     }, skip: _offlineSkip);
 
-    testWidgets('a glyph range missing offline fails instead of hanging', (
+    testStill('a glyph range missing offline fails instead of hanging', (
       tester,
     ) async {
       MapLibreNetwork.status = NetworkStatus.offline;
@@ -450,7 +474,7 @@ void runTests() {
       expect(server.styleAssetRequests, 0);
     }, skip: _offlineSkip);
 
-    testWidgets('overlapping requests each finish', (tester) async {
+    testStill('overlapping requests each finish', (tester) async {
       // In the browser, at most one image's map lives at a time.
       var maps = 0;
       final count = kIsWeb
@@ -469,9 +493,7 @@ void runTests() {
       }
     });
 
-    testWidgets('the timeout counts from when a request starts', (
-      tester,
-    ) async {
+    testStill('the timeout counts from when a request starts', (tester) async {
       // In the browser, the second request waits for the first.
       final held = renderer.render(
         style: MapStyle.url('${server.styleUrl}?held'),
@@ -492,7 +514,7 @@ void runTests() {
       expect((await decodeStill(await next)).colorAt(64, 64), _ground);
     });
 
-    testWidgets('dispose fails a request that waits for its turn', (
+    testStill('dispose fails a request that waits for its turn', (
       tester,
     ) async {
       final held = renderer.render(
@@ -518,7 +540,7 @@ void runTests() {
       server.styleHeld.complete();
     });
 
-    testWidgets('dispose during a request fails it', (tester) async {
+    testStill('dispose during a request fails it', (tester) async {
       final running = renderer.render(
         style: MapStyle.url(server.styleUrl),
         size: _size,

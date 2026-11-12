@@ -46,3 +46,9 @@ typedef MapFrame = ({int width, int height, Uint8List rgba, double scale});
 /// Before it has seen the map render, [render] makes it.
 Future<MapFrame> readMapFrame(void Function() render) =>
     throw UnsupportedError('Only maplibre-gl-js draws into a canvas.');
+
+/// Hides the evaluated properties (`paint`) of every layer that
+/// maplibre-gl-js's `Map.getLayer` returns, until the returned function
+/// restores them.
+void Function() hideLayerPaint() =>
+    throw UnsupportedError('Only maplibre-gl-js has these internals.');
