@@ -6,6 +6,7 @@ library;
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:math';
 import 'dart:ui_web';
 
 import 'package:flutter/widgets.dart';
@@ -224,3 +225,111 @@ extension CameraUpdateFitExt on CameraUpdateFit {
       ..['pitch'] = (camera.pitch ?? pitch).toJS;
   }
 }
+
+/// Extension methods for the [CameraUpdateEye] class.
+extension CameraUpdateEyeExt on CameraUpdateEye {
+  /// The gl-js camera options that put the camera of [map] at the eye,
+  /// [altitude] meters above sea level: `center`, `elevation`, `zoom`,
+  /// `bearing` and `pitch`.
+  ///
+  /// The pitch is limited to the map's, with the eye kept in place. Where
+  /// gl-js puts the center so near or far that the zoom leaves the map's
+  /// range, which would move the camera, the center moves along the view to
+  /// a distance in range.
+  JSObject toJs(interop.JsMap map, {required double altitude}) {
+    final pitch = this.pitch.clamp(
+      map.getMinPitch().toDouble(),
+      map.getMaxPitch().toDouble(),
+    );
+    final lngLat = eye.toJs();
+    var camera = map.calculateCameraOptionsFromCameraLngLatAltRotation(
+      lngLat,
+      altitude,
+      bearing,
+      pitch,
+    );
+    double zoomOf(JSObject camera) =>
+        (camera['zoom']! as JSNumber).toDartDouble;
+    final zoom = zoomOf(camera);
+    final minZoom = map.getMinZoom().toDouble();
+    final maxZoom = map.getMaxZoom().toDouble();
+    if (zoom.isFinite && zoom >= minZoom && zoom <= maxZoom) {
+      return camera
+        ..['bearing'] = bearing.toJS
+        ..['pitch'] = pitch.toJS;
+    }
+    // The zoom falls off by one level for each doubling of the distance from
+    // the camera to the center.
+    JSObject lookingAt(double distance) {
+      final pitchRad = pitch * degree2Radian;
+      final bearingRad = bearing * degree2Radian;
+      final ahead = distance * sin(pitchRad);
+      final target = Geographic(
+        lon:
+            eye.lon +
+            ahead *
+                sin(bearingRad) /
+                (_earthRadius * cos(eye.lat * degree2Radian)) /
+                degree2Radian,
+        lat: eye.lat + ahead * cos(bearingRad) / _earthRadius / degree2Radian,
+      );
+      return map.calculateCameraOptionsFromTo(
+        lngLat,
+        altitude,
+        target.toJs(),
+        altitude - distance * cos(pitchRad),
+      );
+    }
+
+    const probe = 1000.0;
+    final probeZoom = zoomOf(lookingAt(probe));
+    final targetZoom = zoom.isFinite ? zoom.clamp(minZoom, maxZoom) : maxZoom;
+    camera = lookingAt(probe * pow(2, probeZoom - targetZoom));
+    // gl-js works out the bearing and pitch from the two points, which is
+    // undefined straight down.
+    return camera
+      ..['bearing'] = bearing.toJS
+      ..['pitch'] = pitch.toJS;
+  }
+}
+
+/// Extension methods for the [interop.JsMap] class.
+extension JsMapExt on interop.JsMap {
+  /// Where the camera is: its eye, and the eye's height in meters above sea
+  /// level, worked out as gl-js places the camera behind its center.
+  ({Geographic eye, double altitude}) cameraEye() {
+    final center = getCenter().toGeographic();
+    final pitch = getPitch() * degree2Radian;
+    final bearing = getBearing() * degree2Radian;
+    final fov = getVerticalFieldOfView() * degree2Radian;
+    final height = getCanvas().clientHeight;
+    final latitude = center.lat * degree2Radian;
+    // gl-js's cameraToCenterDistance in pixels, over its world size, in
+    // meters at the center.
+    final distance =
+        0.5 *
+        height /
+        tan(fov / 2) /
+        (512 * pow(2, getZoom())) *
+        2 *
+        pi *
+        _earthRadius *
+        cos(latitude);
+    final behind = distance * sin(pitch);
+    return (
+      eye: Geographic(
+        lon:
+            center.lon -
+            behind *
+                sin(bearing) /
+                (_earthRadius * cos(latitude)) /
+                degree2Radian,
+        lat: center.lat - behind * cos(bearing) / _earthRadius / degree2Radian,
+      ),
+      altitude: getCenterElevation() + distance * cos(pitch),
+    );
+  }
+}
+
+/// The radius of the earth in meters that gl-js's Mercator coordinates use.
+const _earthRadius = 6371008.8;

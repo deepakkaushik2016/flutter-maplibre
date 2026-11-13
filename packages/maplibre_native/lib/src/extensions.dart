@@ -108,6 +108,10 @@ extension CameraUpdateExt on CameraUpdate {
           return camera.copyWith(zoom: maxZoom);
         }
         return camera;
+      case CameraUpdateEye():
+        throw UnsupportedError(
+          'CameraUpdate.fromEye is only supported on web.',
+        );
     }
   }
 }

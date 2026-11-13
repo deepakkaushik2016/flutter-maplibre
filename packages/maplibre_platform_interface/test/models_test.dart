@@ -47,6 +47,68 @@ void main() {
   group('CameraUpdate', () {
     const bounds = GeoBox(west: -10, south: -5, east: 10, north: 5);
 
+    group('fromEye', () {
+      const eye = Geographic(lon: 11.4, lat: 47.3);
+
+      test('takes an altitude or a height above the terrain', () {
+        final altitude = CameraUpdate.fromEye(
+          eye,
+          bearing: 30,
+          pitch: 115,
+          altitude: 2400,
+        );
+        expect(altitude, isA<CameraUpdateEye>());
+        altitude as CameraUpdateEye;
+        expect(altitude.eye, eye);
+        expect(altitude.bearing, 30);
+        expect(altitude.pitch, 115);
+        expect(altitude.altitude, 2400);
+        expect(altitude.aboveTerrain, isNull);
+        final aboveTerrain = CameraUpdate.fromEye(
+          eye,
+          bearing: 0,
+          pitch: 80,
+          aboveTerrain: 2,
+        ) as CameraUpdateEye;
+        expect(aboveTerrain.altitude, isNull);
+        expect(aboveTerrain.aboveTerrain, 2);
+      });
+
+      test('throws without an altitude or a height above the terrain', () {
+        expect(
+          () => CameraUpdate.fromEye(eye, bearing: 0, pitch: 80),
+          throwsArgumentError,
+        );
+      });
+
+      test('throws with both an altitude and a height above the terrain', () {
+        expect(
+          () => CameraUpdate.fromEye(
+            eye,
+            bearing: 0,
+            pitch: 80,
+            altitude: 2400,
+            aboveTerrain: 2,
+          ),
+          throwsArgumentError,
+        );
+      });
+
+      test('compares by value', () {
+        CameraUpdate update({double pitch = 115}) =>
+            CameraUpdate.fromEye(eye, bearing: 30, pitch: pitch, altitude: 1);
+        expect(update(), update());
+        expect(update().hashCode, update().hashCode);
+        expect(update(), isNot(update(pitch: 100)));
+        expect(
+          update(),
+          isNot(
+            CameraUpdate.fromEye(eye, bearing: 30, pitch: 115, aboveTerrain: 1),
+          ),
+        );
+      });
+    });
+
     test('position compares by value', () {
       expect(const CameraUpdate.position(), const CameraUpdatePosition());
       expect(_position(3), _position(3));

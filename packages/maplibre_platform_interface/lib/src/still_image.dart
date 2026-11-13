@@ -46,7 +46,10 @@ abstract interface class StillImageRenderer {
   /// times [pixelRatio]. Requests may overlap.
   ///
   /// [camera] may pitch up to 85 degrees, as a map whose
-  /// [MapOptions.maxPitch] is 85.
+  /// [MapOptions.maxPitch] is 85, or up to 180 degrees on web.
+  ///
+  /// [camera] may be a [CameraUpdate.fromEye] with an altitude only on web,
+  /// which then places the center itself and ignores [centerAltitude].
   ///
   /// [terrain]'s source must be in [style]. Unless you give [centerAltitude],
   /// in meters above sea level, the camera's center moves onto the ground, as

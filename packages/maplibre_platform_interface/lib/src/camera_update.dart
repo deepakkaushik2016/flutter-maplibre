@@ -11,6 +11,9 @@ import 'package:maplibre_platform_interface/maplibre_platform_interface.dart';
 /// ```dart
 /// controller.moveCamera(const CameraUpdate.position(zoom: 12));
 /// controller.animateCamera(CameraUpdate.bounds(bounds));
+/// controller.moveCamera(
+///   CameraUpdate.fromEye(trailPoint, bearing: 40, pitch: 100, aboveTerrain: 2),
+/// );
 /// ```
 ///
 /// {@category Basic}
@@ -56,6 +59,42 @@ sealed class CameraUpdate {
     double? pitch,
     double? maxZoom,
   }) = CameraUpdateGeometry;
+
+  /// Places the camera itself at [eye], looking towards [bearing] at
+  /// [pitch], for example to see what a person standing on a trail sees.
+  ///
+  /// The eye is [altitude] meters above sea level, or [aboveTerrain] meters
+  /// above the terrain as the map draws it, with its exaggeration. Pass
+  /// exactly one of them, or this throws an [ArgumentError].
+  ///
+  /// A [pitch] over 90 degrees looks above the horizon; the map shows it up
+  /// to its [MapOptions.maxPitch], and a steeper or flatter [pitch] is
+  /// limited to [MapOptions.minPitch] and [MapOptions.maxPitch] with the
+  /// eye kept in place. The roll and padding of the camera stay as they
+  /// are. [MapController.animateCamera] moves the eye along a straight line
+  /// and turns it on the way, also for [CameraAnimation.fly].
+  ///
+  /// While the camera stays at the eye, the map's center is not clamped to
+  /// the ground, whatever [MapOptions.centerClampedToGround] says. A later
+  /// camera update that is not from an eye brings it back, and so does a
+  /// gesture that starts at a pitch under 90 degrees, both with the camera
+  /// kept in place.
+  ///
+  /// With [aboveTerrain], [MapController.moveCamera],
+  /// [MapController.animateCamera] and [MapController.cameraFor] fail with a
+  /// [TerrainElevationUnavailableException] when the map has no terrain or
+  /// no height of it at [eye] yet, and the camera doesn't move.
+  ///
+  /// Only supported on web, and only for maps and still images with
+  /// [altitude]. Elsewhere, moving the camera to it fails with an
+  /// [UnsupportedError].
+  factory CameraUpdate.fromEye(
+    Geographic eye, {
+    required double bearing,
+    required double pitch,
+    double? altitude,
+    double? aboveTerrain,
+  }) = CameraUpdateEye;
 }
 
 /// A [CameraUpdate] that sets fields of the camera, see
@@ -284,4 +323,84 @@ final class CameraUpdateGeometry extends CameraUpdateFit {
   @override
   String toString() =>
       'CameraUpdate.geometry(${geometry.toText()}, $_fitString)';
+}
+
+/// A [CameraUpdate] that places the camera itself at an eye, see
+/// [CameraUpdate.fromEye].
+///
+/// {@category Basic}
+final class CameraUpdateEye extends CameraUpdate {
+  /// Creates a [CameraUpdate] that places the camera at [eye].
+  ///
+  /// Throws an [ArgumentError] unless exactly one of [altitude] and
+  /// [aboveTerrain] is given.
+  CameraUpdateEye(
+    this.eye, {
+    required this.bearing,
+    required this.pitch,
+    this.altitude,
+    this.aboveTerrain,
+  }) {
+    if ((altitude == null) == (aboveTerrain == null)) {
+      throw ArgumentError(
+        'Pass exactly one of altitude and aboveTerrain, '
+        'not ${altitude == null ? 'neither' : 'both'}.',
+      );
+    }
+  }
+
+  /// Where the camera is.
+  final Geographic eye;
+
+  /// The bearing in degrees that the camera looks towards, 0 is north.
+  final double bearing;
+
+  /// The pitch in degrees, 0 looks straight down and over 90 above the
+  /// horizon.
+  final double pitch;
+
+  /// The height of the eye in meters above sea level, or null if
+  /// [aboveTerrain] gives it.
+  final double? altitude;
+
+  /// The height of the eye in meters above the terrain as the map draws it,
+  /// or null if [altitude] gives it.
+  final double? aboveTerrain;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CameraUpdateEye &&
+          eye == other.eye &&
+          bearing == other.bearing &&
+          pitch == other.pitch &&
+          altitude == other.altitude &&
+          aboveTerrain == other.aboveTerrain;
+
+  @override
+  int get hashCode => Object.hash(eye, bearing, pitch, altitude, aboveTerrain);
+
+  @override
+  String toString() =>
+      'CameraUpdate.fromEye($eye, bearing: $bearing, pitch: $pitch, '
+      'altitude: $altitude, aboveTerrain: $aboveTerrain)';
+}
+
+/// The map has no height of its terrain at a point, because it has no
+/// terrain or its elevation data for the point hasn't loaded yet.
+///
+/// [CameraUpdate.fromEye] with `aboveTerrain` fails with it.
+///
+/// {@category Basic}
+final class TerrainElevationUnavailableException implements Exception {
+  /// Creates an exception for the terrain at [point].
+  const TerrainElevationUnavailableException(this.point);
+
+  /// Where the map has no height of its terrain.
+  final Geographic point;
+
+  @override
+  String toString() =>
+      'TerrainElevationUnavailableException: the map has no terrain height '
+      'at $point';
 }

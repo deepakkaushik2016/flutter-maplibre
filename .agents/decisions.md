@@ -871,6 +871,32 @@ Each entry: the decision, then why.
   next camera or terrain change on, while native applies a change at once.
   The web state doesn't nudge the camera to match, as a jump would also
   stop a running animation.
+- **`CameraUpdate.fromEye` is web only and holds the clamp off.** gl-js's
+  `calculateCameraOptionsFromCameraLngLatAltRotation` gives the center,
+  elevation and zoom of a camera at the eye; where that zoom leaves the
+  map's range (a center gl-js puts at the current center's elevation just
+  below the eye), `calculateCameraOptionsFromTo` aims at a point along the
+  view at a distance in range instead, as gl-js would otherwise move the
+  camera back. `aboveTerrain` adds `queryTerrainElevation` (drawn height,
+  with the exaggeration) and fails with
+  `TerrainElevationUnavailableException` where that is null. gl-js puts a
+  clamped center back onto the ground on every frame, which moves the
+  camera off the eye, so the move turns `centerClampedToGround` off and
+  keeps it off while the camera stays there. The next other camera update
+  restores `MapOptions.centerClampedToGround`, and so does a gesture that
+  starts below a pitch of 90; above the horizon the view meets no ground, a
+  restore would drop the camera by kilometers, so gestures there keep the
+  hold. The restore puts the center back onto the terrain with the camera
+  in place, through a zero-length `easeTo` with `freezeElevation`, whose end
+  does that in gl-js. gl-js animations don't ease `elevation`, and lower
+  the pitch of a frame whose camera would be below the ground, which a
+  pitch over 90 at the old center elevation is; so an animated move to an
+  eye only takes its progress from the gl-js animation's easing, and a
+  `setTransformCameraUpdate` sets each frame's camera: the eye along a
+  straight line from the current one (worked out from the public camera
+  state and the field of view), bearing and pitch eased, through the same
+  conversion as a jump. A fly's arc is not used. Native
+  has no camera-from-eye call in the C API and throws `UnsupportedError`.
 - **`queryTerrainElevation` reports the drawn height, with the
   exaggeration, on every platform**, as gl-js's `Map.queryTerrainElevation`
   and `mln_render_session_query_terrain_elevation` both do; the app divides

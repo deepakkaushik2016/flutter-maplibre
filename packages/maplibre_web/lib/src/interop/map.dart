@@ -114,6 +114,58 @@ extension type JsMap._(Camera _) implements Camera {
   /// Update the maximum bounding box of the map camera.
   external void setMaxBounds(LngLatBounds? maxBounds);
 
+  /// The lowest zoom level of the camera.
+  external num getMinZoom();
+
+  /// The highest zoom level of the camera.
+  external num getMaxZoom();
+
+  /// The lowest pitch of the camera.
+  external num getMinPitch();
+
+  /// The highest pitch of the camera.
+  external num getMaxPitch();
+
+  /// The vertical field of view of the camera in degrees.
+  external num getVerticalFieldOfView();
+
+  /// The elevation of the camera's center in meters above sea level.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#getcenterelevation
+  external num getCenterElevation();
+
+  /// The camera options of a camera at [cameraLngLat], [cameraAlt] meters
+  /// above sea level, that looks towards [bearing] at [pitch]: `center`,
+  /// `elevation`, `zoom`, `bearing` and `pitch`. The center lies along the
+  /// view at the elevation of the current center, or 10 km away where the
+  /// view doesn't reach it.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#calculatecameraoptionsfromcameralnglataltrotation
+  external JSObject calculateCameraOptionsFromCameraLngLatAltRotation(
+    LngLat cameraLngLat,
+    num cameraAlt,
+    num bearing,
+    num pitch,
+  );
+
+  /// The camera options of a camera at [from], [altitudeFrom] meters above
+  /// sea level, that looks at [to], [altitudeTo] meters above sea level:
+  /// `center`, `elevation`, `zoom`, `bearing` and `pitch`.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#calculatecameraoptionsfromto
+  external JSObject calculateCameraOptionsFromTo(
+    LngLat from,
+    num altitudeFrom,
+    LngLat to,
+    num altitudeTo,
+  );
+
+  /// Sets a function that changes each camera update before it applies, or
+  /// removes it if [transform] is null.
+  ///
+  /// https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#settransformcameraupdate
+  external void setTransformCameraUpdate(JSFunction? transform);
+
   /// Sets whether the camera's center follows the ground of the terrain.
   // The JavaScript method takes the flag as its only argument.
   // ignore: avoid_positional_boolean_parameters

@@ -53,6 +53,14 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
 
   bool _nextGestureCausedByController = false;
 
+  /// The camera is at the eye of a [CameraUpdate.fromEye], which holds the
+  /// map's center unclamped from the ground until [_releaseEye].
+  var _eyeHold = false;
+
+  /// The `transformCameraUpdate` of the running [animateCamera] to an eye,
+  /// which sets the camera of each of its frames, see [_easeEye].
+  JSFunction? _eyeEasing;
+
   /// Holds a terrain set while [_setStyle] loads a style.
   final _deferredTerrain = DeferredTerrain();
 
@@ -497,8 +505,10 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     if (options.maxBounds != oldWidget.options.maxBounds) {
       _map.setMaxBounds(options.maxBounds?.toJs());
     }
+    // While the camera is at an eye, _releaseEye applies the new value.
     if (options.centerClampedToGround !=
-        oldWidget.options.centerClampedToGround) {
+            oldWidget.options.centerClampedToGround &&
+        !_eyeHold) {
       _map.setCenterClampedToGround(options.centerClampedToGround);
     }
     if (options.style != oldWidget.options.style) _setStyle(options.style);
@@ -530,6 +540,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     final target = _targetReplacing(update, CameraAnimationResult.cancelled);
     // A move stops a running animation, even if there is nowhere to move.
     if (target == null) return stopCamera();
+    _holdOrReleaseEye(update);
     _nextGestureCausedByController = true;
     _map.jumpTo(target as interop.JumpToOptions);
   }
@@ -542,6 +553,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     // A later animation takes over, which completes the running one.
     final target = _targetReplacing(update, CameraAnimationResult.completed);
     if (target == null) return CameraAnimationResult.cancelled;
+    _holdOrReleaseEye(update);
     target['easing'] = animation.curve.transform.toJS;
     switch (animation) {
       case CameraAnimationEase(:final duration):
@@ -554,6 +566,7 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
         if (peakZoom != null) target['minZoom'] = peakZoom.toJS;
     }
     final run = _animation = _WebCameraAnimation(++_animationIds);
+    if (update is CameraUpdateEye) _easeEye(update, target, animation, run);
     final eventData = _CameraAnimationEventData(
       flutterMapLibreAnimation: run.id,
     );
@@ -606,7 +619,14 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     // its target.
     _animation = null;
     _targetStoppedCamera = false;
-    final target = _target(update);
+    final JSObject? target;
+    try {
+      target = _target(update);
+    } on Object {
+      // The camera stays where it is, so the running animation goes on.
+      _animation = previous;
+      rethrow;
+    }
     if (target == null && !_targetStoppedCamera) {
       _animation = previous;
     } else {
@@ -646,7 +666,106 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
           _targetStoppedCamera = true;
         }
         return update.toJs(_map);
+      case CameraUpdateEye():
+        return update.toJs(_map, altitude: _eyeAltitude(update));
     }
+  }
+
+  /// The height of the eye of [update] in meters above sea level.
+  ///
+  /// Throws a [TerrainElevationUnavailableException] for a height above the
+  /// terrain where the map has none.
+  double _eyeAltitude(CameraUpdateEye update) {
+    if (update.altitude case final altitude?) return altitude;
+    // maplibre-gl-js gives the height as drawn, with the exaggeration.
+    final ground = _terrainElevation(update.eye);
+    if (ground == null) {
+      throw TerrainElevationUnavailableException(update.eye);
+    }
+    return ground + update.aboveTerrain!;
+  }
+
+  /// Holds the center unclamped from the ground for a move to an eye, or
+  /// releases that hold for any other move.
+  void _holdOrReleaseEye(CameraUpdate update) {
+    if (update is! CameraUpdateEye) return _releaseEye();
+    // maplibre-gl-js would put the center back onto the ground on the next
+    // frame, which moves the camera away from the eye.
+    _eyeHold = true;
+    _map.setCenterClampedToGround(false);
+  }
+
+  /// Applies [MapOptions.centerClampedToGround] again after a move to an
+  /// eye, with the camera kept in place. With [unlessAboveHorizon], the hold
+  /// stays while the camera looks at or above the horizon.
+  void _releaseEye({bool unlessAboveHorizon = false}) {
+    if (!_eyeHold) return;
+    final pitch = _map.getPitch();
+    if (unlessAboveHorizon && pitch >= 90) return;
+    _eyeHold = false;
+    final clamped = options.centerClampedToGround;
+    _map.setCenterClampedToGround(clamped);
+    // Above the horizon, the view meets no ground to put the center on.
+    if (!clamped || _map.terrain == null || pitch >= 90) return;
+    // An animation that freezes the elevation ends by moving the center
+    // along the view onto the terrain, with the camera in place.
+    _silently(
+      () => _map.easeTo(
+        interop.EaseToOptions(duration: 0, freezeElevation: true),
+      ),
+    );
+  }
+
+  /// Moves the camera of [run], an animation to the eye of [update], along
+  /// a straight line from the current eye, turning on the way.
+  ///
+  /// gl-js animations keep the center elevation as it is while the center
+  /// isn't clamped to the ground, and keep the camera above the ground on
+  /// each frame by lowering its pitch, which a pitch over 90 at that
+  /// elevation trips. So the animation only gives the progress, through its
+  /// easing, and a `transformCameraUpdate` sets the whole camera of each
+  /// frame.
+  void _easeEye(
+    CameraUpdateEye update,
+    JSObject target,
+    CameraAnimation animation,
+    _WebCameraAnimation run,
+  ) {
+    final (eye: fromEye, altitude: fromAltitude) = _map.cameraEye();
+    final toAltitude = _eyeAltitude(update);
+    final fromBearing = _map.getBearing().toDouble();
+    final fromPitch = _map.getPitch().toDouble();
+    // The shorter way round.
+    final turn = (update.bearing - fromBearing + 540) % 360 - 180;
+    final east = (update.eye.lon - fromEye.lon + 540) % 360 - 180;
+    final curve = animation.curve.transform;
+    // An animation without frames, as for a browser that prefers reduced
+    // motion, goes to its end without easing.
+    var progress = 1.0;
+    target['easing'] = ((double t) => progress = curve(t)).toJS;
+    final easing = _eyeEasing = ((JSObject next) {
+      if (!identical(_animation, run)) return JSObject();
+      final k = progress;
+      double lerp(double a, double b) => a + (b - a) * k;
+      final altitude = lerp(fromAltitude, toAltitude);
+      return CameraUpdateEye(
+        Geographic(
+          lon: fromEye.lon + east * k,
+          lat: lerp(fromEye.lat, update.eye.lat),
+        ),
+        bearing: fromBearing + turn * k,
+        pitch: lerp(fromPitch, update.pitch),
+        altitude: altitude,
+      ).toJs(_map, altitude: altitude);
+    }).toJS;
+    _map.setTransformCameraUpdate(easing);
+    unawaited(
+      run.result.whenComplete(() {
+        if (!identical(_eyeEasing, easing)) return;
+        _eyeEasing = null;
+        if (_mapCreated && mounted) _map.setTransformCameraUpdate(null);
+      }),
+    );
   }
 
   /// Ends the running [animateCamera] with [result].
@@ -867,8 +986,24 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
 
   /// Moves the camera of the new map to [initCamera] before its first frame.
   void _applyInitialCamera(CameraUpdate initCamera) {
-    final target = _target(initCamera, resetPadding: false);
-    if (target != null) _map.jumpTo(target as interop.JumpToOptions);
+    final JSObject? target;
+    try {
+      target = _target(initCamera, resetPadding: false);
+    } on TerrainElevationUnavailableException catch (error, stackTrace) {
+      // A new map has no terrain yet.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'maplibre_web',
+          context: ErrorDescription('while applying MapOptions.initCamera'),
+        ),
+      );
+      return;
+    }
+    if (target == null) return;
+    _holdOrReleaseEye(initCamera);
+    _map.jumpTo(target as interop.JumpToOptions);
   }
 
   /// Loads [style], see [MapOptions.style].
@@ -998,6 +1133,7 @@ class _WebGestureCamera implements GestureCameraSink {
     _state._endAnimation(CameraAnimationResult.cancelled);
     // Catches a fling, whose end then reports the end of its move.
     _map.stop();
+    _state._releaseEye(unlessAboveHorizon: true);
     _pan.reset();
     _state
       .._gestureMoving = true
@@ -1075,6 +1211,7 @@ class _WebGestureCamera implements GestureCameraSink {
     // end is reported.
     _state._endAnimation(CameraAnimationResult.cancelled);
     _map.stop();
+    _state._releaseEye(unlessAboveHorizon: true);
     final target = _pan.cameraAround(around, zoomBy: levels);
     _state._nextMoveByUser = true;
     _map.easeTo(

@@ -90,8 +90,9 @@ final class StillImageRendererWeb implements StillImageRenderer {
     }
   }
 
-  /// The steepest pitch of an image, as of a map's [MapOptions.maxPitch].
-  static const _maxPitch = 85.0;
+  /// The steepest pitch of an image, as of a map's [MapOptions.maxPitch] on
+  /// web.
+  static const _maxPitch = 180.0;
 
   Future<Uint8List> _draw(
     _Request request, {
@@ -139,7 +140,8 @@ final class StillImageRendererWeb implements StillImageRenderer {
               )).toJS,
           // As on native, the center moves onto the ground unless the caller
           // gives its height.
-          centerClampedToGround: centerAltitude == null,
+          centerClampedToGround:
+              centerAltitude == null && camera is! CameraUpdateEye,
           canvasContextAttributes: {'preserveDrawingBuffer': true}.jsify(),
           pixelRatio: pixelRatio,
           maxCanvasSize: [16384, 16384].jsify(),
@@ -207,7 +209,10 @@ final class StillImageRendererWeb implements StillImageRenderer {
 
     // Before the style loads, so the first tiles are those of the image.
     final target = _target(map, camera);
-    if (centerAltitude != null) target['elevation'] = centerAltitude.toJS;
+    // An eye gives the center elevation itself.
+    if (centerAltitude != null && camera is! CameraUpdateEye) {
+      target['elevation'] = centerAltitude.toJS;
+    }
     map.jumpTo(target as interop.JumpToOptions);
 
     await idle.future;
@@ -309,6 +314,14 @@ final class StillImageRendererWeb implements StillImageRenderer {
               (throw StillImageException(
                 'The bounds ${camera.bounds} do not fit the image',
               )),
+        CameraUpdateEye(:final altitude?) => camera.toJs(
+          map,
+          altitude: altitude,
+        ),
+        CameraUpdateEye() => throw UnsupportedError(
+          'CameraUpdate.fromEye with aboveTerrain is not supported for still '
+          'images, give its altitude.',
+        ),
       };
 
   /// Sets [terrain] on the loaded style, whose source must be a raster-dem
