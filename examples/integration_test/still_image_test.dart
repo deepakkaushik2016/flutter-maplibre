@@ -390,6 +390,32 @@ void runTests() {
       expect(image.colorAt(64, 127), _ground);
     });
 
+    testStill('an eye looks above the horizon', (tester) async {
+      Future<StillPixels> renderEye(double pitch) async => decodeStill(
+        await renderer.render(
+          style: MapStyle.url(server.styleUrl),
+          size: _size,
+          // 1000 m above the ground.
+          camera: CameraUpdate.fromEye(
+            const Geographic(lon: 86.925, lat: 27.988),
+            bearing: 0,
+            pitch: pitch,
+            altitude: 6400,
+          ),
+          terrain: _terrain,
+          timeout: const Duration(seconds: 20),
+        ),
+      );
+      // The lower edge looks 8 degrees down, onto the ground 7 km away.
+      final level = await renderEye(100);
+      expect(level.colorAt(64, 1), _background);
+      expect(level.colorAt(64, 127), _ground);
+      // All of the view is above the horizon.
+      final skyward = await renderEye(115);
+      expect(skyward.colorAt(64, 1), _background);
+      expect(skyward.colorAt(64, 127), _background);
+    }, skip: !kIsWeb);
+
     testStill('a background that gl-js internals no longer describe '
         'leaves the sky clear instead of failing', (tester) async {
       addTearDown(hideLayerPaint());

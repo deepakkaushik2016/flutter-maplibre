@@ -244,3 +244,59 @@ const _hideLayerPaintScript = '''
   return () => { proto.getLayer = getLayer; };
 })()
 ''';
+
+/// Where the camera of a maplibre-gl-js map is: its eye in degrees and
+/// meters above sea level, the elevation of its center, and whether that
+/// center is clamped to the ground.
+typedef MapEye = ({
+  double lon,
+  double lat,
+  double altitude,
+  double centerElevation,
+  bool centerClampedToGround,
+});
+
+/// The camera of the maplibre-gl-js map on the page that drew last, read
+/// from gl-js's internals, or null before a map drew since the first call.
+MapEye? lastMapEye() {
+  if (!globalContext.has('__maplibreEye')) {
+    globalContext.callMethod<JSAny?>('eval'.toJS, _mapEyeScript.toJS);
+  }
+  final eye = globalContext.callMethod<JSObject?>('__maplibreEye'.toJS);
+  if (eye == null) return null;
+  double number(String name) =>
+      eye.getProperty<JSNumber>(name.toJS).toDartDouble;
+  return (
+    lon: number('lon'),
+    lat: number('lat'),
+    altitude: number('altitude'),
+    centerElevation: number('centerElevation'),
+    centerClampedToGround: eye
+        .getProperty<JSBoolean>('centerClampedToGround'.toJS)
+        .toDart,
+  );
+}
+
+const _mapEyeScript = '''
+(() => {
+  const proto = maplibregl.Map.prototype;
+  const render = proto._render;
+  let last = null;
+  proto._render = function (...args) {
+    last = this;
+    return render.apply(this, args);
+  };
+  window.__maplibreEye = () => {
+    if (!last) return null;
+    const transform = (last._camera && last._camera.transform) || last.transform;
+    const lngLat = transform.getCameraLngLat();
+    return {
+      lon: lngLat.lng,
+      lat: lngLat.lat,
+      altitude: transform.getCameraAltitude(),
+      centerElevation: last.getCenterElevation(),
+      centerClampedToGround: last.getCenterClampedToGround(),
+    };
+  };
+})();
+''';

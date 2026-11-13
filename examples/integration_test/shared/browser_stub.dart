@@ -52,3 +52,19 @@ Future<MapFrame> readMapFrame(void Function() render) =>
 /// restores them.
 void Function() hideLayerPaint() =>
     throw UnsupportedError('Only maplibre-gl-js has these internals.');
+
+/// Where the camera of a maplibre-gl-js map is: its eye in degrees and
+/// meters above sea level, the elevation of its center, and whether that
+/// center is clamped to the ground.
+typedef MapEye = ({
+  double lon,
+  double lat,
+  double altitude,
+  double centerElevation,
+  bool centerClampedToGround,
+});
+
+/// The camera of the maplibre-gl-js map on the page that drew last, or null
+/// before a map drew since the first call.
+MapEye? lastMapEye() =>
+    throw UnsupportedError('Only maplibre-gl-js has these internals.');

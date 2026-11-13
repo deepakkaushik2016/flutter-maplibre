@@ -74,6 +74,9 @@ Flutter MapLibre: a federated plugin in a Dart pub workspace.
   `terrain_query_test.dart` compares concurrent and list terrain
   conversions with the same calls one by one.
   `sky_test.dart` reads the sky at the top of a steep view over it.
+  `eye_camera_test.dart` places the camera at an eye with
+  `CameraUpdate.fromEye`, and reads where gl-js put it
+  (`lastMapEye` of `shared/browser.dart`).
   `user_location_test.dart` reads the frame's pixels back to find what
   the map drew: Flutter's layer on native, the gl-js canvas on web
   (`shared/browser.dart`). `lib/utils/simulated_locations.dart` walks a simulated

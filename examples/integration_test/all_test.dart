@@ -3,6 +3,7 @@ import 'package:integration_test/integration_test.dart';
 import 'camera_test.dart' as camera;
 import 'darwin_texture_test.dart' as darwin_texture;
 import 'events_test.dart' as events;
+import 'eye_camera_test.dart' as eye_camera;
 import 'features_test.dart' as features;
 import 'follow_camera_test.dart' as follow_camera;
 import 'frame_pacing_test.dart' as frame_pacing;
@@ -30,6 +31,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   map.runTests();
   camera.runTests();
+  eye_camera.runTests();
   events.runTests();
   projection.runTests();
   style.runTests();
