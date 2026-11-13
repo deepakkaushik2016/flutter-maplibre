@@ -166,6 +166,12 @@ abstract interface class MapController {
   ///
   /// [CameraUpdatePosition.anchor] is not taken into account: the camera
   /// keeps the center of [update], or the current one.
+  ///
+  /// While the camera is at the eye of a [CameraUpdate.fromEye], an update
+  /// without a center is worked out from the current center, which lies
+  /// along the view off the ground. Moving the camera first puts that
+  /// center onto the ground below the horizon, so the move may land
+  /// elsewhere than this camera.
   Future<CameraPosition> cameraFor(CameraUpdate update);
 
   /// Get the current camera position on the map.

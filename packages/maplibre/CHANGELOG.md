@@ -2,6 +2,12 @@
 
 ### Breaking Changes
 
+- `CameraUpdate` has a new subtype, `CameraUpdateEye`
+  (`CameraUpdate.fromEye`). A `switch` over a `CameraUpdate` that names
+  every subtype must handle it too.
+- `CameraUpdate` has a new subtype, `CameraUpdateEye`
+  (`CameraUpdate.fromEye`). A `switch` over a `CameraUpdate` that names
+  every subtype must handle it too.
 - `maplibre_native_ffi` now comes by Git from a terrain fork, and an app has
   to name that fork's releases as
   `hooks.user_defines.maplibre_native_ffi.release_url` in its root
@@ -33,6 +39,20 @@
 
 ### Features
 
+- `CameraUpdate.fromEye(eye, bearing:, pitch:, altitude:)` places the
+  camera itself at a point, for example a person standing on a trail, and
+  may look above the horizon; `aboveTerrain:` gives the eye's height above
+  the drawn terrain instead, and fails with
+  `TerrainElevationUnavailableException` where the map has none. Only on
+  web, where `MapOptions.maxPitch` may now be up to 180; elsewhere it throws
+  an `UnsupportedError`.
+- `CameraUpdate.fromEye(eye, bearing:, pitch:, altitude:)` places the
+  camera itself at a point, for example a person standing on a trail, and
+  may look above the horizon; `aboveTerrain:` gives the eye's height above
+  the drawn terrain instead, and fails with
+  `TerrainElevationUnavailableException` where the map has none. Only on
+  web, where `MapOptions.maxPitch` may now be up to 180; elsewhere it throws
+  an `UnsupportedError`.
 - `StillImageRenderer` draws a map into a PNG without showing one, for
   example to share it, with an optional 3D terrain, on web and native.
 - `MapLibreNetwork.status` tells every map and the `OfflineManager`

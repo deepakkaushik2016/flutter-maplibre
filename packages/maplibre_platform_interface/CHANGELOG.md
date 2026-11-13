@@ -6,6 +6,9 @@ below. See also the
 
 ### Breaking Changes
 
+- `CameraUpdate` has a new subtype, `CameraUpdateEye`
+  (`CameraUpdate.fromEye`). A `switch` over a `CameraUpdate` that names
+  every subtype must handle it too.
 - `MapController` has five new members: `toLngLatOnTerrain`,
   `toScreenLocationOnTerrain`, `toScreenLocationsOnTerrain`,
   `setTerrainLoadMode` and `queryTerrainElevation`. A class that
@@ -22,6 +25,13 @@ below. See also the
 
 ### Features
 
+- `CameraUpdate.fromEye(eye, bearing:, pitch:, altitude:)` places the
+  camera itself at a point, for example a person standing on a trail, and
+  may look above the horizon; `aboveTerrain:` gives the eye's height above
+  the drawn terrain instead, and fails with
+  `TerrainElevationUnavailableException` where the map has none. Only on
+  web, where `MapOptions.maxPitch` may now be up to 180; elsewhere it throws
+  an `UnsupportedError`.
 - `StillImageRenderer` draws a map into a PNG without showing one, for
   example to share it, with an optional 3D terrain. Not on web.
 - `MapController.maybeOf` and `MapController.of` take `camera: false` to

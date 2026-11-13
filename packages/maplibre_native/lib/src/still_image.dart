@@ -45,6 +45,9 @@ final class StillImageRendererNative implements StillImageRenderer {
     if (width < 1 || height < 1 || width > 16384 || height > 16384) {
       throw ArgumentError.value(size, 'size', 'must be 1 to 16384 pixels');
     }
+    if (camera is CameraUpdateEye) {
+      throw UnsupportedError('CameraUpdate.fromEye is only supported on web.');
+    }
     if (_disposed) throw const StillImageException(_disposedMessage);
     final request = _Request();
     _requests.add(request);

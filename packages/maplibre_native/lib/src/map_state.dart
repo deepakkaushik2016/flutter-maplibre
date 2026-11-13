@@ -163,7 +163,21 @@ class MapLibreMapStateNative extends MapLibreMapState {
       map.discarding.setEventMask(eventMask);
     }
     final options = this.options;
-    final initCamera = options.initCamera;
+    var initCamera = options.initCamera;
+    if (initCamera is CameraUpdateEye) {
+      // Reported like any other unsupported camera, and the map starts at
+      // the camera of its style, as on web for an eye it can't place.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: UnsupportedError(
+            'CameraUpdate.fromEye is only supported on web.',
+          ),
+          library: 'maplibre_native',
+          context: ErrorDescription('while applying MapOptions.initCamera'),
+        ),
+      );
+      initCamera = null;
+    }
     // Without an initial camera, MapLibre Native moves to the camera of the
     // style once it loads, but only while no camera change happened. Setting
     // camera constraints is one, so they follow the first style.

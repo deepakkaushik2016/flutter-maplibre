@@ -50,6 +50,8 @@ abstract interface class StillImageRenderer {
   ///
   /// [camera] may be a [CameraUpdate.fromEye] with an altitude only on web,
   /// which then places the center itself and ignores [centerAltitude].
+  /// Elsewhere, an eye fails with an [UnsupportedError] before anything
+  /// loads.
   ///
   /// [terrain]'s source must be in [style]. Unless you give [centerAltitude],
   /// in meters above sea level, the camera's center moves onto the ground, as

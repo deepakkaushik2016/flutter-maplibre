@@ -69,6 +69,11 @@ class MapOptions {
   /// The maximum camera pitch / tilt. Allowed values are 0-85, or 0-180 on
   /// web, where a pitch over 90 looks above the horizon, see
   /// [CameraUpdate.fromEye]. Defaults to 60.
+  ///
+  /// On web only [CameraUpdate.fromEye] goes past 90:
+  /// [CameraUpdate.position], fits and gestures end at about 90 even with a
+  /// higher maximum, as a camera pitched further over a center on the
+  /// ground would be under it, and the map lowers its pitch.
   final double maxPitch;
 
   /// The maximum bounding box of the map camera. No constraints are in place

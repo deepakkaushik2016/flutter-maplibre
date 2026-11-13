@@ -882,13 +882,22 @@ Each entry: the decision, then why.
   `TerrainElevationUnavailableException` where that is null. gl-js puts a
   clamped center back onto the ground on every frame, which moves the
   camera off the eye, so the move turns `centerClampedToGround` off and
-  keeps it off while the camera stays there. The next other camera update
-  restores `MapOptions.centerClampedToGround`, and so does a gesture that
-  starts below a pitch of 90; above the horizon the view meets no ground, a
-  restore would drop the camera by kilometers, so gestures there keep the
-  hold. The restore puts the center back onto the terrain with the camera
-  in place, through a zero-length `easeTo` with `freezeElevation`, whose end
-  does that in gl-js. gl-js animations don't ease `elevation`, and lower
+  keeps it off while the camera stays there. Below the horizon, the next
+  other camera update, or a gesture as it starts or ends, restores
+  `MapOptions.centerClampedToGround` with the camera in place: over a
+  terrain through a zero-length `easeTo` with `freezeElevation`, whose end
+  moves the center along the view onto the terrain in gl-js; without one
+  by a jump to the camera that looks at sea level along the view, where
+  gl-js puts the center. At or above the horizon the view meets no ground,
+  and a restore would drop the camera by kilometers, so gestures and
+  updates that keep the center (a position without center or anchor) keep
+  the hold; an update that moves the center restores the clamp at once and
+  lands as on any map. The zoom-range fallback above is what an eye just
+  above the ground the last center sits on takes, as when scrubbing along
+  a trail. Native reports an
+  eye as `initCamera` and starts at the style's camera, as web does for an
+  eye it can't place, and its still images reject one before loading.
+  gl-js animations don't ease `elevation`, and lower
   the pitch of a frame whose camera would be below the ground, which a
   pitch over 90 at the old center elevation is; so an animated move to an
   eye only takes its progress from the gl-js animation's easing, and a

@@ -76,18 +76,29 @@ sealed class CameraUpdate {
   ///
   /// While the camera stays at the eye, the map's center is not clamped to
   /// the ground, whatever [MapOptions.centerClampedToGround] says. A later
-  /// camera update that is not from an eye brings it back, and so does a
-  /// gesture that starts at a pitch under 90 degrees, both with the camera
-  /// kept in place.
+  /// camera update that is not from an eye, or a gesture, brings the clamp
+  /// back:
+  ///
+  /// - Below the horizon (a pitch under 90 degrees), the camera stays in
+  ///   place and the center moves along the view onto the ground, the
+  ///   terrain or sea level. The update or gesture then starts from there.
+  /// - At or above the horizon, the view meets no ground to put the center
+  ///   on. Gestures, and updates that keep the center (a
+  ///   [CameraUpdate.position] without a center or anchor), keep the clamp
+  ///   off; the first gesture to end below the horizon brings it back. An
+  ///   update that moves the center brings it back at once, and its camera
+  ///   lands as on any map with the clamp.
   ///
   /// With [aboveTerrain], [MapController.moveCamera],
   /// [MapController.animateCamera] and [MapController.cameraFor] fail with a
   /// [TerrainElevationUnavailableException] when the map has no terrain or
   /// no height of it at [eye] yet, and the camera doesn't move.
   ///
-  /// Only supported on web, and only for maps and still images with
-  /// [altitude]. Elsewhere, moving the camera to it fails with an
-  /// [UnsupportedError].
+  /// Only supported on web, where still images take it only with
+  /// [altitude]. Elsewhere, moving the camera to it,
+  /// [MapController.cameraFor] and still images fail with an
+  /// [UnsupportedError], and as [MapOptions.initCamera] it is reported as
+  /// an error and the map starts at the camera of its style.
   factory CameraUpdate.fromEye(
     Geographic eye, {
     required double bearing,

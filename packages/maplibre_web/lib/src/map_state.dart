@@ -688,7 +688,16 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// Holds the center unclamped from the ground for a move to an eye, or
   /// releases that hold for any other move.
   void _holdOrReleaseEye(CameraUpdate update) {
-    if (update is! CameraUpdateEye) return _releaseEye();
+    if (update is! CameraUpdateEye) {
+      // At or above the horizon, an update that keeps the center keeps the
+      // hold, as the view meets no ground to put the center on; one that
+      // moves the center gets the clamp back, as on any map.
+      final keepsCenter =
+          update is CameraUpdatePosition &&
+          update.center == null &&
+          update.anchor == null;
+      return _releaseEye(unlessAboveHorizon: keepsCenter);
+    }
     // maplibre-gl-js would put the center back onto the ground on the next
     // frame, which moves the camera away from the eye.
     _eyeHold = true;
@@ -706,12 +715,35 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     final clamped = options.centerClampedToGround;
     _map.setCenterClampedToGround(clamped);
     // Above the horizon, the view meets no ground to put the center on.
-    if (!clamped || _map.terrain == null || pitch >= 90) return;
-    // An animation that freezes the elevation ends by moving the center
-    // along the view onto the terrain, with the camera in place.
+    if (!clamped || pitch >= 90) return;
+    if (_map.terrain != null) {
+      // An animation that freezes the elevation ends by moving the center
+      // along the view onto the terrain, with the camera in place.
+      _silently(
+        () => _map.easeTo(
+          interop.EaseToOptions(duration: 0, freezeElevation: true),
+        ),
+      );
+      return;
+    }
+    // Without a terrain, maplibre-gl-js puts the center at sea level, so it
+    // moves there along the view, with the camera in place.
+    final (:eye, :altitude) = _map.cameraEye();
+    if (altitude <= 0) return;
+    final camera = _map.cameraAlongView(
+      eye,
+      altitude: altitude,
+      bearing: _map.getBearing().toDouble(),
+      pitch: pitch.toDouble(),
+      distance: altitude / cos(pitch * degree2Radian),
+    );
     _silently(
-      () => _map.easeTo(
-        interop.EaseToOptions(duration: 0, freezeElevation: true),
+      () => _map.jumpTo(
+        (JSObject()
+              ..['center'] = camera['center']
+              ..['zoom'] = camera['zoom']
+              ..['elevation'] = 0.toJS)
+            as interop.JumpToOptions,
       ),
     );
   }
@@ -1151,6 +1183,8 @@ class _WebGestureCamera implements GestureCameraSink {
   @override
   void gestureEnd({GestureVelocity velocity = GestureVelocity.zero}) {
     if (!_state._gestureMoving) return;
+    // A gesture that started above the horizon may have tilted below it.
+    _state._releaseEye(unlessAboveHorizon: true);
     _state._gestureMoving = false;
     if (!_state._gestureMoveStarted) return;
     if (!_fling(velocity)) {

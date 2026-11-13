@@ -259,31 +259,24 @@ extension CameraUpdateEyeExt on CameraUpdateEye {
         ..['pitch'] = pitch.toJS;
     }
     // The zoom falls off by one level for each doubling of the distance from
-    // the camera to the center.
-    JSObject lookingAt(double distance) {
-      final pitchRad = pitch * degree2Radian;
-      final bearingRad = bearing * degree2Radian;
-      final ahead = distance * sin(pitchRad);
-      final target = Geographic(
-        lon:
-            eye.lon +
-            ahead *
-                sin(bearingRad) /
-                (_earthRadius * cos(eye.lat * degree2Radian)) /
-                degree2Radian,
-        lat: eye.lat + ahead * cos(bearingRad) / _earthRadius / degree2Radian,
-      );
-      return map.calculateCameraOptionsFromTo(
-        lngLat,
-        altitude,
-        target.toJs(),
-        altitude - distance * cos(pitchRad),
-      );
-    }
-
+    // the camera to the center. A little inside the range, so that rounding
+    // doesn't take it out again.
+    JSObject lookingAt(double distance) => map.cameraAlongView(
+      eye,
+      altitude: altitude,
+      bearing: bearing,
+      pitch: pitch,
+      distance: distance,
+    );
     const probe = 1000.0;
+    const margin = 0.01;
     final probeZoom = zoomOf(lookingAt(probe));
-    final targetZoom = zoom.isFinite ? zoom.clamp(minZoom, maxZoom) : maxZoom;
+    final targetZoom = zoom.isFinite
+        ? zoom.clamp(
+            min(minZoom + margin, maxZoom),
+            max(maxZoom - margin, minZoom),
+          )
+        : maxZoom - margin;
     camera = lookingAt(probe * pow(2, probeZoom - targetZoom));
     // gl-js works out the bearing and pitch from the two points, which is
     // undefined straight down.
@@ -327,6 +320,37 @@ extension JsMapExt on interop.JsMap {
         lat: center.lat - behind * cos(bearing) / _earthRadius / degree2Radian,
       ),
       altitude: getCenterElevation() + distance * cos(pitch),
+    );
+  }
+
+  /// The gl-js camera options of a camera at [eye], [altitude] meters above
+  /// sea level, looking towards [bearing] at [pitch], whose center lies
+  /// [distance] meters along the view: `center`, `elevation`, `zoom`,
+  /// `bearing` and `pitch`, the last two worked out from the two points.
+  JSObject cameraAlongView(
+    Geographic eye, {
+    required double altitude,
+    required double bearing,
+    required double pitch,
+    required double distance,
+  }) {
+    final pitchRad = pitch * degree2Radian;
+    final bearingRad = bearing * degree2Radian;
+    final ahead = distance * sin(pitchRad);
+    final target = Geographic(
+      lon:
+          eye.lon +
+          ahead *
+              sin(bearingRad) /
+              (_earthRadius * cos(eye.lat * degree2Radian)) /
+              degree2Radian,
+      lat: eye.lat + ahead * cos(bearingRad) / _earthRadius / degree2Radian,
+    );
+    return calculateCameraOptionsFromTo(
+      eye.toJs(),
+      altitude,
+      target.toJs(),
+      altitude - distance * cos(pitchRad),
     );
   }
 }
