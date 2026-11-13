@@ -888,11 +888,14 @@ Each entry: the decision, then why.
   terrain through a zero-length `easeTo` with `freezeElevation`, whose end
   moves the center along the view onto the terrain in gl-js; without one
   by a jump to the camera that looks at sea level along the view, where
-  gl-js puts the center. At or above the horizon the view meets no ground,
-  and a restore would drop the camera by kilometers, so gestures and
+  gl-js puts the center. Where no such move keeps the camera in place (at
+  or above the horizon, where a restore would drop the camera by
+  kilometers; without a terrain, an eye at or below sea level, or a
+  sea-level center whose zoom leaves the map's range), gestures and
   updates that keep the center (a position without center or anchor) keep
-  the hold; an update that moves the center restores the clamp at once and
-  lands as on any map. The zoom-range fallback above is what an eye just
+  the hold, and each checks again at its end, with the pitch it ended at;
+  an update that moves the center restores the clamp at once and lands as
+  on any map. The zoom-range fallback above is what an eye just
   above the ground the last center sits on takes, as when scrubbing along
   a trail. Native reports an
   eye as `initCamera` and starts at the style's camera, as web does for an

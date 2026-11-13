@@ -271,12 +271,11 @@ extension CameraUpdateEyeExt on CameraUpdateEye {
     const probe = 1000.0;
     const margin = 0.01;
     final probeZoom = zoomOf(lookingAt(probe));
-    final targetZoom = zoom.isFinite
-        ? zoom.clamp(
-            min(minZoom + margin, maxZoom),
-            max(maxZoom - margin, minZoom),
-          )
-        : maxZoom - margin;
+    // A range narrower than the margins takes its middle.
+    final (low, high) = maxZoom - minZoom < 2 * margin
+        ? ((minZoom + maxZoom) / 2, (minZoom + maxZoom) / 2)
+        : (minZoom + margin, maxZoom - margin);
+    final targetZoom = zoom.isFinite ? zoom.clamp(low, high) : high;
     camera = lookingAt(probe * pow(2, probeZoom - targetZoom));
     // gl-js works out the bearing and pitch from the two points, which is
     // undefined straight down.

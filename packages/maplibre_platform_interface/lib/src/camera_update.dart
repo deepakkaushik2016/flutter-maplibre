@@ -82,12 +82,15 @@ sealed class CameraUpdate {
   /// - Below the horizon (a pitch under 90 degrees), the camera stays in
   ///   place and the center moves along the view onto the ground, the
   ///   terrain or sea level. The update or gesture then starts from there.
-  /// - At or above the horizon, the view meets no ground to put the center
-  ///   on. Gestures, and updates that keep the center (a
-  ///   [CameraUpdate.position] without a center or anchor), keep the clamp
-  ///   off; the first gesture to end below the horizon brings it back. An
-  ///   update that moves the center brings it back at once, and its camera
-  ///   lands as on any map with the clamp.
+  /// - Where the camera can't stay in place, the clamp stays off for
+  ///   gestures and for updates that keep the center (a
+  ///   [CameraUpdate.position] without a center or anchor), and the end of
+  ///   each of them checks again. That is at or above the horizon, where
+  ///   the view meets no ground, and, without a terrain, for an eye at or
+  ///   below sea level or one whose view meets sea level so near or far
+  ///   that the zoom leaves the map's range.
+  /// - An update that moves the center brings the clamp back at once, and
+  ///   its camera lands as on any map with the clamp.
   ///
   /// With [aboveTerrain], [MapController.moveCamera],
   /// [MapController.animateCamera] and [MapController.cameraFor] fail with a

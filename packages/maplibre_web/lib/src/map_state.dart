@@ -57,6 +57,10 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// map's center unclamped from the ground until [_releaseEye].
   var _eyeHold = false;
 
+  /// How many times [_eyeHold] started or ended, so that a check after a
+  /// move can tell whether a later move took over.
+  var _eyeHolds = 0;
+
   /// The `transformCameraUpdate` of the running [animateCamera] to an eye,
   /// which sets the camera of each of its frames, see [_easeEye].
   JSFunction? _eyeEasing;
@@ -541,8 +545,11 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     // A move stops a running animation, even if there is nowhere to move.
     if (target == null) return stopCamera();
     _holdOrReleaseEye(update);
+    final holds = _eyeHolds;
     _nextGestureCausedByController = true;
     _map.jumpTo(target as interop.JumpToOptions);
+    // An update that keeps the center may have tilted below the horizon.
+    _releaseEyeAfter(update, holds);
   }
 
   @override
@@ -567,6 +574,14 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
     }
     final run = _animation = _WebCameraAnimation(++_animationIds);
     if (update is CameraUpdateEye) _easeEye(update, target, animation, run);
+    final holds = _eyeHolds;
+    unawaited(
+      run.result.then((result) {
+        if (result != CameraAnimationResult.completed || !mounted) return;
+        // An update that keeps the center may have tilted below the horizon.
+        _releaseEyeAfter(update, holds);
+      }),
+    );
     final eventData = _CameraAnimationEventData(
       flutterMapLibreAnimation: run.id,
     );
@@ -689,34 +704,42 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
   /// releases that hold for any other move.
   void _holdOrReleaseEye(CameraUpdate update) {
     if (update is! CameraUpdateEye) {
-      // At or above the horizon, an update that keeps the center keeps the
-      // hold, as the view meets no ground to put the center on; one that
+      // Where the camera can't stay in place with the clamp, an update that
+      // keeps the center keeps the hold, and its end checks again; one that
       // moves the center gets the clamp back, as on any map.
       final keepsCenter =
           update is CameraUpdatePosition &&
           update.center == null &&
           update.anchor == null;
-      return _releaseEye(unlessAboveHorizon: keepsCenter);
+      return _releaseEye(onlyInPlace: keepsCenter);
     }
     // maplibre-gl-js would put the center back onto the ground on the next
     // frame, which moves the camera away from the eye.
     _eyeHold = true;
+    _eyeHolds++;
     _map.setCenterClampedToGround(false);
   }
 
   /// Applies [MapOptions.centerClampedToGround] again after a move to an
-  /// eye, with the camera kept in place. With [unlessAboveHorizon], the hold
-  /// stays while the camera looks at or above the horizon.
-  void _releaseEye({bool unlessAboveHorizon = false}) {
+  /// eye. With [onlyInPlace], the hold stays where the camera can't stay in
+  /// place with the clamp: at or above the horizon, which meets no ground
+  /// to put the center on, and without a terrain where sea level along the
+  /// view is missing or out of the map's zoom range.
+  void _releaseEye({bool onlyInPlace = false}) {
     if (!_eyeHold) return;
-    final pitch = _map.getPitch();
-    if (unlessAboveHorizon && pitch >= 90) return;
-    _eyeHold = false;
+    final pitch = _map.getPitch().toDouble();
     final clamped = options.centerClampedToGround;
+    final terrain = _map.terrain != null;
+    final seaLevel = clamped && pitch < 90 && !terrain
+        ? _seaLevelView(pitch)
+        : null;
+    final inPlace = !clamped || (pitch < 90 && (terrain || seaLevel != null));
+    if (onlyInPlace && !inPlace) return;
+    _eyeHold = false;
+    _eyeHolds++;
     _map.setCenterClampedToGround(clamped);
-    // Above the horizon, the view meets no ground to put the center on.
     if (!clamped || pitch >= 90) return;
-    if (_map.terrain != null) {
+    if (terrain) {
       // An animation that freezes the elevation ends by moving the center
       // along the view onto the terrain, with the camera in place.
       _silently(
@@ -724,28 +747,57 @@ final class MapLibreMapStateWeb extends MapLibreMapState {
           interop.EaseToOptions(duration: 0, freezeElevation: true),
         ),
       );
-      return;
+      return _syncCamera();
     }
     // Without a terrain, maplibre-gl-js puts the center at sea level, so it
     // moves there along the view, with the camera in place.
-    final (:eye, :altitude) = _map.cameraEye();
-    if (altitude <= 0) return;
-    final camera = _map.cameraAlongView(
-      eye,
-      altitude: altitude,
-      bearing: _map.getBearing().toDouble(),
-      pitch: pitch.toDouble(),
-      distance: altitude / cos(pitch * degree2Radian),
-    );
+    if (seaLevel == null) return;
     _silently(
       () => _map.jumpTo(
         (JSObject()
-              ..['center'] = camera['center']
-              ..['zoom'] = camera['zoom']
+              ..['center'] = seaLevel['center']
+              ..['zoom'] = seaLevel['zoom']
               ..['elevation'] = 0.toJS)
             as interop.JumpToOptions,
       ),
     );
+    _syncCamera();
+  }
+
+  /// Hands the widgets the camera after a silent move that kept it in
+  /// place but moved its center, which no camera event reports.
+  void _syncCamera() {
+    if (!mounted) return;
+    final mapCamera = getCamera();
+    setState(() => camera = mapCamera);
+  }
+
+  /// The camera that looks at sea level along the view of the current one,
+  /// from the same eye, or null where the view doesn't reach sea level or
+  /// its zoom is out of the map's range.
+  JSObject? _seaLevelView(double pitch) {
+    final (:eye, :altitude) = _map.cameraEye();
+    if (altitude <= 0) return null;
+    final camera = _map.cameraAlongView(
+      eye,
+      altitude: altitude,
+      bearing: _map.getBearing().toDouble(),
+      pitch: pitch,
+      distance: altitude / cos(pitch * degree2Radian),
+    );
+    final zoom = (camera['zoom']! as JSNumber).toDartDouble;
+    final inRange =
+        zoom.isFinite &&
+        zoom >= _map.getMinZoom().toDouble() &&
+        zoom <= _map.getMaxZoom().toDouble();
+    return inRange ? camera : null;
+  }
+
+  /// Ends the hold after a camera update that keeps the center, once the
+  /// pitch it moved to is known, unless a later move took over.
+  void _releaseEyeAfter(CameraUpdate update, int holds) {
+    if (update is CameraUpdateEye || !_eyeHold || holds != _eyeHolds) return;
+    _releaseEye(onlyInPlace: true);
   }
 
   /// Moves the camera of [run], an animation to the eye of [update], along
@@ -1165,7 +1217,7 @@ class _WebGestureCamera implements GestureCameraSink {
     _state._endAnimation(CameraAnimationResult.cancelled);
     // Catches a fling, whose end then reports the end of its move.
     _map.stop();
-    _state._releaseEye(unlessAboveHorizon: true);
+    _state._releaseEye(onlyInPlace: true);
     _pan.reset();
     _state
       .._gestureMoving = true
@@ -1184,7 +1236,7 @@ class _WebGestureCamera implements GestureCameraSink {
   void gestureEnd({GestureVelocity velocity = GestureVelocity.zero}) {
     if (!_state._gestureMoving) return;
     // A gesture that started above the horizon may have tilted below it.
-    _state._releaseEye(unlessAboveHorizon: true);
+    _state._releaseEye(onlyInPlace: true);
     _state._gestureMoving = false;
     if (!_state._gestureMoveStarted) return;
     if (!_fling(velocity)) {
@@ -1245,7 +1297,7 @@ class _WebGestureCamera implements GestureCameraSink {
     // end is reported.
     _state._endAnimation(CameraAnimationResult.cancelled);
     _map.stop();
-    _state._releaseEye(unlessAboveHorizon: true);
+    _state._releaseEye(onlyInPlace: true);
     final target = _pan.cameraAround(around, zoomBy: levels);
     _state._nextMoveByUser = true;
     _map.easeTo(
