@@ -61,6 +61,22 @@ Future<MapEye> _expectEyeAt(
   return shown;
 }
 
+/// A drag past the touch slop, then a step there and back, which starts and
+/// ends a gesture and pans the map back to where it was.
+Future<void> _dragThereAndBack(WidgetTester tester, TestMap map) async {
+  final finger = await tester.startGesture(
+    map.toGlobal(map.center + const Offset(30, 0)),
+  );
+  await finger.moveBy(const Offset(-30, 0));
+  await tester.pump(const Duration(milliseconds: 16));
+  await finger.moveBy(const Offset(-2, 0));
+  await tester.pump(const Duration(milliseconds: 16));
+  await finger.moveBy(const Offset(2, 0));
+  // Lifted at rest, so it does not fling.
+  await tester.pump(const Duration(milliseconds: 200));
+  await finger.up();
+}
+
 void runTests() {
   group('CameraUpdate.fromEye', () {
     testWidgets('puts the camera at the eye above the horizon', (tester) async {
@@ -182,6 +198,73 @@ void runTests() {
       expect(camera.pitch, closeTo(115, 1e-6));
       await _expectEyeAt(map, _eye, _altitude);
     }, skip: !kIsWeb);
+
+    testWidgets('a gesture without a terrain clamps the center again in '
+        'place', (tester) async {
+      final map = await pumpMap(tester, options: _skywardOptions());
+      // Watches the map's camera from its next frame on.
+      lastMapEye();
+      // Looking at sea level 600 m away.
+      await map.controller.moveCamera(
+        CameraUpdate.fromEye(_eye, bearing: 0, pitch: 60, altitude: 300),
+      );
+      await map.waitForLatestFrame();
+      expect(lastMapEye()!.centerClampedToGround, isFalse);
+      await _dragThereAndBack(tester, map);
+      final shown = await _expectEyeAt(map, _eye, 300, meters: 2);
+      expect(shown.centerClampedToGround, isTrue);
+      expect(shown.centerElevation, 0);
+    }, skip: !kIsWeb);
+
+    testWidgets('a gesture keeps the hold where sea level is out of the '
+        'zoom range', (tester) async {
+      final map = await pumpMap(tester, options: _skywardOptions(maxZoom: 14));
+      // Watches the map's camera from its next frame on.
+      lastMapEye();
+      // Sea level along the view is 400 m away, past zoom 14.
+      await map.controller.moveCamera(
+        CameraUpdate.fromEye(_eye, bearing: 0, pitch: 60, altitude: 200),
+      );
+      await _dragThereAndBack(tester, map);
+      final shown = await _expectEyeAt(map, _eye, 200, meters: 2);
+      expect(shown.centerClampedToGround, isFalse);
+    }, skip: !kIsWeb);
+
+    for (final animated in const [false, true]) {
+      testWidgets('an update that keeps the center and tilts below the '
+          'horizon clamps it again${animated ? ', animated' : ''}', (
+        tester,
+      ) async {
+        final map = await pumpMap(tester, options: _skywardOptions());
+        // Watches the map's camera from its next frame on.
+        lastMapEye();
+        await map.controller.moveCamera(
+          CameraUpdate.fromEye(
+            _eye,
+            bearing: 0,
+            pitch: 115,
+            altitude: _altitude,
+          ),
+        );
+        const update = CameraUpdate.position(pitch: 30);
+        if (animated) {
+          expect(
+            await map.pumpFuture(
+              map.controller.animateCamera(update),
+              reason: 'the animation never ended',
+            ),
+            CameraAnimationResult.completed,
+          );
+        } else {
+          await map.controller.moveCamera(update);
+        }
+        expect(map.controller.getCamera().pitch, closeTo(30, 1e-6));
+        await map.waitForLatestFrame();
+        final shown = lastMapEye()!;
+        expect(shown.centerClampedToGround, isTrue);
+        expect(shown.centerElevation, 0);
+      }, skip: !kIsWeb);
+    }
 
     testWidgets('a camera update ends an eye animation', (tester) async {
       final map = await pumpMap(tester, options: _skywardOptions());
@@ -370,19 +453,7 @@ void runTests() {
       final before = lastMapEye()!;
       expect(before.centerClampedToGround, isFalse);
 
-      // Past the touch slop, then a step there and back, which starts the
-      // gesture and pans the map back to where it was.
-      final finger = await tester.startGesture(
-        map.toGlobal(map.center + const Offset(30, 0)),
-      );
-      await finger.moveBy(const Offset(-30, 0));
-      await tester.pump(const Duration(milliseconds: 16));
-      await finger.moveBy(const Offset(-2, 0));
-      await tester.pump(const Duration(milliseconds: 16));
-      await finger.moveBy(const Offset(2, 0));
-      // Lifted at rest, so it does not fling.
-      await tester.pump(const Duration(milliseconds: 200));
-      await finger.up();
+      await _dragThereAndBack(tester, map);
       await map.waitForLatestFrame();
       final after = await _expectEyeAt(
         map,
